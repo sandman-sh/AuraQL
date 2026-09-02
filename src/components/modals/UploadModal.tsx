@@ -33,16 +33,34 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 
         if (file.name.endsWith('.json')) {
           rows = JSON.parse(text);
-        } else {
+          const parseCsvLine = (line: string): string[] => {
+            const result: string[] = [];
+            let current = '';
+            let inQuotes = false;
+            for (let c = 0; c < line.length; c++) {
+              const char = line[c];
+              if (char === '"') {
+                inQuotes = !inQuotes;
+              } else if (char === ',' && !inQuotes) {
+                result.push(current.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
+                current = '';
+              } else {
+                current += char;
+              }
+            }
+            result.push(current.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
+            return result;
+          };
+
           const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
           if (lines.length < 2) throw new Error('CSV must contain a header row and at least one data row');
-          const headers = lines[0].split(',').map((h) => h.trim().replace(/^"|"$/g, ''));
+          const headers = parseCsvLine(lines[0]).map((h) => h.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase() || 'col');
 
           for (let i = 1; i < lines.length; i++) {
-            const values = lines[i].split(',').map((v) => v.trim().replace(/^"|"$/g, ''));
+            const values = parseCsvLine(lines[i]);
             const row: Record<string, any> = {};
             headers.forEach((h, idx) => {
-              const val = values[idx];
+              const val = values[idx] ?? '';
               const numVal = Number(val);
               row[h] = !isNaN(numVal) && val !== '' ? numVal : val;
             });

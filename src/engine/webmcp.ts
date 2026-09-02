@@ -21,11 +21,15 @@ class WebMcpManager {
   }
 
   private detectCapabilities() {
-    if (typeof window !== 'undefined') {
-      this.isNativeSupported =
-        'modelContext' in document ||
-        'modelContext' in navigator ||
-        'modelContext' in window;
+    try {
+      if (typeof window !== 'undefined') {
+        this.isNativeSupported =
+          'modelContext' in document ||
+          'modelContext' in navigator ||
+          'modelContext' in window;
+      }
+    } catch {
+      this.isNativeSupported = false;
     }
   }
 
@@ -111,8 +115,8 @@ class WebMcpManager {
             columns: string[];
           }> = [];
 
-          if (input?.tableName && DATASETS_METADATA[input.tableName]) {
-            const d = DATASETS_METADATA[input.tableName];
+          if (input?.tableName && DATASETS_METADATA[input.tableName.toLowerCase()]) {
+            const d = DATASETS_METADATA[input.tableName.toLowerCase()];
             tables = [
               {
                 table: d.tableName,
@@ -328,32 +332,50 @@ class WebMcpManager {
     };
 
     if (typeof window !== 'undefined') {
-      (window as any).modelContext = modelContextHost;
-      (window as any).auraMcp = self;
+      try {
+        (window as any).modelContext = modelContextHost;
+        (window as any).auraMcp = self;
+      } catch (e) {
+        console.warn('[WebMCP] Failed attaching to window.modelContext:', e);
+      }
 
       if (typeof document !== 'undefined') {
-        const doc = document as any;
-        if (!doc.modelContext) {
-          doc.modelContext = modelContextHost;
-        } else if (typeof doc.modelContext.registerTool === 'function') {
-          // Native browser agent has already injected document.modelContext
-          try {
+        try {
+          const doc = document as any;
+          if (!doc.modelContext) {
+            try {
+              doc.modelContext = modelContextHost;
+            } catch {
+              try {
+                Object.defineProperty(document, 'modelContext', {
+                  value: modelContextHost,
+                  writable: true,
+                  configurable: true
+                });
+              } catch (err) {
+                console.warn('[WebMCP] document.modelContext defineProperty:', err);
+              }
+            }
+          } else if (typeof doc.modelContext.registerTool === 'function') {
             for (const tool of tools) {
-              doc.modelContext.registerTool(
-                {
-                  name: tool.name,
-                  description: tool.description,
-                  inputSchema: tool.inputSchema,
-                  execute: tool.execute
-                },
-                { signal: this.abortController.signal }
-              );
+              try {
+                doc.modelContext.registerTool(
+                  {
+                    name: tool.name,
+                    description: tool.description,
+                    inputSchema: tool.inputSchema,
+                    execute: tool.execute
+                  },
+                  { signal: this.abortController.signal }
+                );
+              } catch (regErr) {
+                console.warn('[WebMCP] Tool registration with native agent:', regErr);
+              }
             }
             this.isNativeSupported = true;
-            console.log('⚡ [WebMCP] Native document.modelContext detected & registered');
-          } catch (e) {
-            console.warn('[WebMCP] Native registration:', e);
           }
+        } catch (e) {
+          console.warn('[WebMCP] document.modelContext setup:', e);
         }
       }
     }

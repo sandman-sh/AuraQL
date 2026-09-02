@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Terminal, Play, Zap, Copy, Check } from 'lucide-react';
+import { Terminal, Play, Zap, Copy, Check, AlertTriangle } from 'lucide-react';
 import { DATASETS_METADATA } from '../../engine/datasets';
 
 interface SqlConsoleProps {
@@ -9,6 +9,7 @@ interface SqlConsoleProps {
   executionTimeMs: number;
   rowCount: number;
   isAgentExecuting?: boolean;
+  errorMessage?: string;
 }
 
 export const SqlConsole: React.FC<SqlConsoleProps> = ({
@@ -17,7 +18,8 @@ export const SqlConsole: React.FC<SqlConsoleProps> = ({
   onRunSql,
   executionTimeMs,
   rowCount,
-  isAgentExecuting
+  isAgentExecuting,
+  errorMessage
 }) => {
   const [editorSql, setEditorSql] = useState<string>(currentSql);
   const [copied, setCopied] = useState<boolean>(false);
@@ -26,7 +28,7 @@ export const SqlConsole: React.FC<SqlConsoleProps> = ({
     setEditorSql(currentSql);
   }, [currentSql]);
 
-  const meta = DATASETS_METADATA[activeDataset];
+  const meta = DATASETS_METADATA[(activeDataset || '').toLowerCase()];
 
   const handleCopy = () => {
     navigator.clipboard.writeText(editorSql);
@@ -44,7 +46,9 @@ export const SqlConsole: React.FC<SqlConsoleProps> = ({
   return (
     <div
       className={`glass-card rounded-none p-4 border transition-all duration-200 ${
-        isAgentExecuting
+        errorMessage
+          ? 'border-rose-500/60 ring-1 ring-rose-500/30'
+          : isAgentExecuting
           ? 'border-brand-500 ring-1 ring-brand-500/40 glow-purple-sm'
           : 'border-slate-200 dark:border-white/[0.08]'
       }`}
@@ -120,6 +124,14 @@ export const SqlConsole: React.FC<SqlConsoleProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Error Message Display */}
+      {errorMessage && (
+        <div className="mt-2 p-2.5 bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-500/40 text-rose-700 dark:text-rose-300 text-xs font-mono flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+          <span>{errorMessage}</span>
+        </div>
+      )}
 
       {/* Sample Query Shortcuts */}
       {meta && meta.sampleQueries && meta.sampleQueries.length > 0 && (

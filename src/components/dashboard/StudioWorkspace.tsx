@@ -14,7 +14,7 @@ import { ChartConfig, QueryResult, WebMcpToolEvent, ChartType } from '../../type
 import { auraEngine } from '../../engine/auraql';
 import { webMcp } from '../../engine/webmcp';
 import { DATASETS_METADATA } from '../../engine/datasets';
-import { Upload, FileText, Database, Zap, ShieldCheck, Sparkles } from 'lucide-react';
+import { Upload, Database, Zap, ShieldCheck, Sparkles } from 'lucide-react';
 
 interface StudioWorkspaceProps {
   onReturnHome: () => void;
@@ -62,17 +62,25 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
     const unsubState = webMcp.subscribeStateUpdates(({ type, data }) => {
       if (type === 'query') {
         const res = data as QueryResult;
-        setCurrentSql(res.sql);
-        setQueryResult(res);
-        setAgentUpdated(true);
-        setTimeout(() => setAgentUpdated(false), 3000);
+        if (res) {
+          setCurrentSql(res.sql || '');
+          setQueryResult(res);
+          setAgentUpdated(true);
+          setTimeout(() => setAgentUpdated(false), 3000);
+        }
       } else if (type === 'chart') {
         const cfg = data as ChartConfig;
-        setChartConfig(cfg);
-        setAgentUpdated(true);
-        setTimeout(() => setAgentUpdated(false), 3000);
+        if (cfg) {
+          setChartConfig(cfg);
+          setAgentUpdated(true);
+          setTimeout(() => setAgentUpdated(false), 3000);
+        }
       } else if (type === 'filter') {
         setActiveFilter(data);
+        if (data && data.column && data.value && activeDataset) {
+          const filteredSql = `SELECT * FROM ${activeDataset} WHERE ${data.column} = '${data.value}' LIMIT 50;`;
+          handleRunQuery(filteredSql);
+        }
       }
     });
 
@@ -85,12 +93,13 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
       unsubEvents();
       unsubState();
     };
-  }, []);
+  }, [activeDataset]);
 
   const handleSelectDataset = (tableName: string) => {
+    if (!tableName) return;
     setActiveDataset(tableName);
     setActiveFilter(null);
-    const meta = DATASETS_METADATA[tableName];
+    const meta = DATASETS_METADATA[tableName.toLowerCase()];
     const initialQuery = meta?.sampleQueries?.[0]?.sql || `SELECT * FROM ${tableName} LIMIT 50;`;
     setCurrentSql(initialQuery);
     handleRunQuery(initialQuery);
@@ -100,11 +109,13 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
     if (rows.length > 0) {
       const firstRow = rows[0];
       const stringCols = Object.keys(firstRow).filter((k) => typeof firstRow[k] === 'string');
-      const numericCols = Object.keys(firstRow).filter((k) => typeof firstRow[k] === 'number');
+      const numericCols = Object.keys(firstRow).filter(
+        (k) => typeof firstRow[k] === 'number' || !isNaN(Number(firstRow[k]))
+      );
 
       setChartConfig({
         type: 'bar',
-        title: `Metric Breakdown - ${tableName}`,
+        title: `${tableName} Overview`,
         xAxis: stringCols[0] || Object.keys(firstRow)[0] || '',
         yAxis: numericCols[0] || Object.keys(firstRow)[1] || '',
         colorTheme: 'purple'
@@ -113,24 +124,34 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
   };
 
   const handleRunQuery = async (sql: string) => {
+    if (!sql || !sql.trim()) return;
     setCurrentSql(sql);
     const res = await auraEngine.query(sql);
     setQueryResult(res);
 
-    if (res.rows.length > 0 && res.columns.length >= 2) {
+    if (res.rows.length > 0 && res.columns.length >= 1) {
+      const firstRow = res.rows[0];
+      const stringCol = res.columns.find((c) => typeof firstRow[c] === 'string') || res.columns[0];
+      const numCol =
+        res.columns.find((c) => typeof firstRow[c] === 'number') ||
+        res.columns.find((c) => !isNaN(Number(firstRow[c]))) ||
+        res.columns[1] ||
+        res.columns[0];
+
       setChartConfig((prev) => {
         const hasValidX = prev.xAxis && res.columns.includes(prev.xAxis);
         const hasValidY = prev.yAxis && res.columns.includes(prev.yAxis);
         return {
           ...prev,
-          xAxis: hasValidX ? prev.xAxis : res.columns[0],
-          yAxis: hasValidY ? prev.yAxis : res.columns[1]
+          xAxis: hasValidX ? prev.xAxis : stringCol,
+          yAxis: hasValidY ? prev.yAxis : numCol
         };
       });
     }
   };
 
   const handleApplyFilter = async (column: string, value: string) => {
+    if (!activeDataset) return;
     setActiveFilter({ column, value });
 
     await webMcp.callTool('apply_dashboard_filter', {
@@ -145,6 +166,7 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
 
   const handleClearFilter = async () => {
     setActiveFilter(null);
+    if (!activeDataset) return;
     const defaultSql = `SELECT * FROM ${activeDataset} LIMIT 50;`;
     await handleRunQuery(defaultSql);
   };
@@ -207,21 +229,24 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
   };
 
   const handleCustomDatasetImported = (tableName: string, count: number) => {
-    setActiveDataset(tableName);
+    const safeName = (tableName || '').toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    setActiveDataset(safeName);
     setIsUploadOpen(false);
-    const customSql = `SELECT * FROM ${tableName} LIMIT 50;`;
+    const customSql = `SELECT * FROM ${safeName} LIMIT 50;`;
     setCurrentSql(customSql);
     handleRunQuery(customSql);
 
-    const rows = auraEngine.getTableData(tableName);
+    const rows = auraEngine.getTableData(safeName);
     if (rows.length > 0) {
       const firstRow = rows[0];
       const stringCols = Object.keys(firstRow).filter((k) => typeof firstRow[k] === 'string');
-      const numericCols = Object.keys(firstRow).filter((k) => typeof firstRow[k] === 'number');
+      const numericCols = Object.keys(firstRow).filter(
+        (k) => typeof firstRow[k] === 'number' || !isNaN(Number(firstRow[k]))
+      );
 
       setChartConfig({
         type: 'bar',
-        title: `${tableName} Overview`,
+        title: `${safeName} Overview`,
         xAxis: stringCols[0] || Object.keys(firstRow)[0] || '',
         yAxis: numericCols[0] || Object.keys(firstRow)[1] || '',
         colorTheme: 'purple'
@@ -305,6 +330,7 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
               executionTimeMs={queryResult.executionTimeMs}
               rowCount={queryResult.rowCount}
               isAgentExecuting={agentUpdated}
+              errorMessage={queryResult.error}
             />
 
             {/* Live Data Grid */}
@@ -378,7 +404,7 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
 
                 <div className="p-3 bg-white dark:bg-dark-900 border border-slate-200 dark:border-white/[0.06]">
                   <div className="flex items-center gap-1.5 text-accent-cyan font-bold text-xs mb-1">
-                    <FileText className="w-3.5 h-3.5" />
+                    <Database className="w-3.5 h-3.5" />
                     <span>WebMCP Active</span>
                   </div>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 font-sans">
