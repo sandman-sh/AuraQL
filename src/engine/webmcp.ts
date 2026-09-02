@@ -88,7 +88,11 @@ class WebMcpManager {
    * Exposes them to window.modelContext & document.modelContext according to the WebMCP protocol.
    */
   public registerAllTools() {
-    this.abortController.abort();
+    try {
+      this.abortController.abort();
+    } catch {
+      // Ignore abort errors
+    }
     this.abortController = new AbortController();
 
     const tools: WebMcpToolRegistration[] = [
@@ -121,14 +125,14 @@ class WebMcpManager {
               {
                 table: d.tableName,
                 rowCount: d.rowCount,
-                columns: d.columns.map((c) => `${c.name} (${c.type})`)
+                columns: (d.columns || []).map((c) => `${c.name} (${c.type})`)
               }
             ];
           } else {
             tables = Object.values(DATASETS_METADATA).map((d) => ({
               table: d.tableName,
               rowCount: d.rowCount,
-              columns: d.columns.map((c) => `${c.name} (${c.type})`)
+              columns: (d.columns || []).map((c) => `${c.name} (${c.type})`)
             }));
           }
 
@@ -198,7 +202,7 @@ class WebMcpManager {
                     rowCount: result.rowCount,
                     executionTimeMs: result.executionTimeMs,
                     columns: result.columns,
-                    rows: result.rows.slice(0, 50)
+                    rows: (result.rows || []).slice(0, 50)
                   },
                   null,
                   2
@@ -321,7 +325,13 @@ class WebMcpManager {
     const self = this;
     const modelContextHost = {
       registerTool: (tool: any) => {
-        self.registeredTools.push(tool);
+        if (!tool || !tool.name) return;
+        const existingIdx = self.registeredTools.findIndex((t) => t.name === tool.name);
+        if (existingIdx >= 0) {
+          self.registeredTools[existingIdx] = tool;
+        } else {
+          self.registeredTools.push(tool);
+        }
       },
       listTools: () => self.registeredTools,
       callTool: (name: string, args: Record<string, any>) => self.callTool(name, args),
@@ -336,7 +346,7 @@ class WebMcpManager {
         (window as any).modelContext = modelContextHost;
         (window as any).auraMcp = self;
       } catch (e) {
-        console.warn('[WebMCP] Failed attaching to window.modelContext:', e);
+        console.warn('[WebMCP] window.modelContext assignment skipped:', e);
       }
 
       if (typeof document !== 'undefined') {
@@ -356,7 +366,8 @@ class WebMcpManager {
                 console.warn('[WebMCP] document.modelContext defineProperty:', err);
               }
             }
-          } else if (typeof doc.modelContext.registerTool === 'function') {
+          } else if (doc.modelContext !== modelContextHost && typeof doc.modelContext.registerTool === 'function') {
+            // Only register with an external native browser agent context, not our own polyfill
             for (const tool of tools) {
               try {
                 doc.modelContext.registerTool(

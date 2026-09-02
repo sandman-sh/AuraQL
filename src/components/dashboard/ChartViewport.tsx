@@ -20,8 +20,9 @@ export const ChartViewport: React.FC<ChartViewportProps> = ({
   const xKey = config.xAxis || '';
   const yKey = config.yAxis || '';
 
-  // Filter and map real data safely (prevent NaN)
-  const chartItems = (data || []).slice(0, 10).map((row) => {
+  // Filter and map real data safely (prevent NaN, prevent null rows)
+  const validData = (data || []).filter((r) => r && typeof r === 'object');
+  const chartItems = validData.slice(0, 10).map((row) => {
     const rawVal = Number(row[yKey]);
     return {
       label: String(row[xKey] ?? 'Item'),
@@ -29,7 +30,7 @@ export const ChartViewport: React.FC<ChartViewportProps> = ({
     };
   });
 
-  const numericValues = chartItems.map((d) => d.value).filter((v) => !isNaN(v));
+  const numericValues = chartItems.map((d) => d.value).filter((v) => !isNaN(v) && isFinite(v));
   const maxValue = numericValues.length > 0 ? Math.max(...numericValues, 1) : 1;
   const purplePalette = ['#C084FC', '#A855F7', '#9333EA', '#7E22CE', '#6B21A8', '#581C87', '#3B0764', '#818CF8', '#00F0FF', '#10B981'];
 
@@ -57,7 +58,7 @@ export const ChartViewport: React.FC<ChartViewportProps> = ({
               {config.title || 'Chart Viewport'}
             </h3>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded-none bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-300 border border-brand-200 dark:border-brand-500/30 font-semibold">
-              {config.type.toUpperCase()}
+              {(config.type || 'BAR').toUpperCase()}
             </span>
           </div>
           <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">

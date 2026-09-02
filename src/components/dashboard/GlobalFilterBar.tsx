@@ -25,7 +25,7 @@ export const GlobalFilterBar: React.FC<GlobalFilterBarProps> = ({
   const options = useMemo<FilterOption[]>(() => {
     if (!dataset) return [];
     const rows = auraEngine.getTableData(dataset);
-    if (rows.length === 0) return [];
+    if (!rows || rows.length === 0 || !rows[0]) return [];
 
     const firstRow = rows[0];
     const stringCols = Object.keys(firstRow).filter(
@@ -61,11 +61,17 @@ export const GlobalFilterBar: React.FC<GlobalFilterBarProps> = ({
           return (
             <button
               key={idx}
-              onClick={() => (isSelected ? onClearFilter() : onApplyFilter(opt.column, opt.value))}
-              className={`btn-sharp px-2.5 py-1 text-[11px] font-mono border transition-all flex items-center gap-1 shrink-0 ${
+              onClick={() => {
+                if (isSelected) {
+                  onClearFilter();
+                } else {
+                  onApplyFilter(opt.column, opt.value);
+                }
+              }}
+              className={`px-2.5 py-1 rounded-none border transition-all text-[11px] flex items-center gap-1.5 whitespace-nowrap ${
                 isSelected
-                  ? 'bg-brand-600 text-white font-bold border-brand-400 shadow-sm shadow-brand-600/30'
-                  : 'bg-slate-100 hover:bg-slate-200 dark:bg-dark-900 dark:hover:bg-dark-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10 hover:border-brand-500/40'
+                  ? 'bg-brand-600 text-white border-brand-400 shadow-sm shadow-brand-600/30'
+                  : 'bg-white dark:bg-dark-900 border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 hover:border-brand-500/50'
               }`}
             >
               {isSelected && <Check className="w-3 h-3" />}
@@ -78,7 +84,7 @@ export const GlobalFilterBar: React.FC<GlobalFilterBarProps> = ({
       {activeFilter && (
         <button
           onClick={onClearFilter}
-          className="btn-sharp px-2.5 py-1 text-[10px] font-mono text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-300 dark:border-rose-500/30 flex items-center gap-1 shrink-0 transition-colors"
+          className="btn-sharp px-2 py-1 text-[11px] text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 border border-rose-200 dark:border-rose-500/30 flex items-center gap-1 transition-colors"
         >
           <X className="w-3 h-3" />
           <span>Reset Slicers</span>

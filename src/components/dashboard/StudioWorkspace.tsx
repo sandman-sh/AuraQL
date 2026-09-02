@@ -53,7 +53,11 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
 
   // Initialize WebMCP tools and register event listeners
   useEffect(() => {
-    webMcp.registerAllTools();
+    try {
+      webMcp.registerAllTools();
+    } catch (e) {
+      console.warn('[StudioWorkspace] webMcp registerAllTools:', e);
+    }
 
     const unsubEvents = webMcp.subscribeEvents((newEvt) => {
       setEvents((prev) => [newEvt, ...prev.slice(0, 50)]);
@@ -97,16 +101,17 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
 
   const handleSelectDataset = (tableName: string) => {
     if (!tableName) return;
-    setActiveDataset(tableName);
+    const safeName = tableName.toLowerCase();
+    setActiveDataset(safeName);
     setActiveFilter(null);
-    const meta = DATASETS_METADATA[tableName.toLowerCase()];
-    const initialQuery = meta?.sampleQueries?.[0]?.sql || `SELECT * FROM ${tableName} LIMIT 50;`;
+    const meta = DATASETS_METADATA[safeName];
+    const initialQuery = meta?.sampleQueries?.[0]?.sql || `SELECT * FROM ${safeName} LIMIT 50;`;
     setCurrentSql(initialQuery);
     handleRunQuery(initialQuery);
 
     // Auto-configure initial chart from first string & numeric columns
-    const rows = auraEngine.getTableData(tableName);
-    if (rows.length > 0) {
+    const rows = auraEngine.getTableData(safeName);
+    if (rows.length > 0 && rows[0]) {
       const firstRow = rows[0];
       const stringCols = Object.keys(firstRow).filter((k) => typeof firstRow[k] === 'string');
       const numericCols = Object.keys(firstRow).filter(
@@ -115,7 +120,7 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
 
       setChartConfig({
         type: 'bar',
-        title: `${tableName} Overview`,
+        title: `${safeName} Overview`,
         xAxis: stringCols[0] || Object.keys(firstRow)[0] || '',
         yAxis: numericCols[0] || Object.keys(firstRow)[1] || '',
         colorTheme: 'purple'
@@ -126,27 +131,44 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
   const handleRunQuery = async (sql: string) => {
     if (!sql || !sql.trim()) return;
     setCurrentSql(sql);
-    const res = await auraEngine.query(sql);
-    setQueryResult(res);
-
-    if (res.rows.length > 0 && res.columns.length >= 1) {
-      const firstRow = res.rows[0];
-      const stringCol = res.columns.find((c) => typeof firstRow[c] === 'string') || res.columns[0];
-      const numCol =
-        res.columns.find((c) => typeof firstRow[c] === 'number') ||
-        res.columns.find((c) => !isNaN(Number(firstRow[c]))) ||
-        res.columns[1] ||
-        res.columns[0];
-
-      setChartConfig((prev) => {
-        const hasValidX = prev.xAxis && res.columns.includes(prev.xAxis);
-        const hasValidY = prev.yAxis && res.columns.includes(prev.yAxis);
-        return {
-          ...prev,
-          xAxis: hasValidX ? prev.xAxis : stringCol,
-          yAxis: hasValidY ? prev.yAxis : numCol
-        };
+    try {
+      const res = await auraEngine.query(sql);
+      setQueryResult(res || {
+        sql,
+        columns: [],
+        rows: [],
+        rowCount: 0,
+        executionTimeMs: 0.1,
+        timestamp: new Date()
       });
+
+      if (res && res.rows && res.rows.length > 0 && res.columns && res.columns.length >= 1) {
+        const firstRow = res.rows[0];
+        if (firstRow) {
+          const stringCol = res.columns.find((c) => typeof firstRow[c] === 'string') || res.columns[0];
+          const numCol =
+            res.columns.find((c) => typeof firstRow[c] === 'number') ||
+            res.columns.find((c) => !isNaN(Number(firstRow[c]))) ||
+            res.columns[1] ||
+            res.columns[0];
+
+          setChartConfig((prev) => {
+            const hasValidX = prev.xAxis && res.columns.includes(prev.xAxis);
+            const hasValidY = prev.yAxis && res.columns.includes(prev.yAxis);
+            return {
+              ...prev,
+              xAxis: hasValidX ? prev.xAxis : stringCol,
+              yAxis: hasValidY ? prev.yAxis : numCol
+            };
+          });
+        }
+      }
+    } catch (err: any) {
+      console.error('[StudioWorkspace] Query execution error:', err);
+      setQueryResult((prev) => ({
+        ...prev,
+        error: err?.message || 'Query execution error'
+      }));
     }
   };
 
@@ -154,11 +176,15 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
     if (!activeDataset) return;
     setActiveFilter({ column, value });
 
-    await webMcp.callTool('apply_dashboard_filter', {
-      column,
-      operator: '=',
-      value
-    });
+    try {
+      await webMcp.callTool('apply_dashboard_filter', {
+        column,
+        operator: '=',
+        value
+      });
+    } catch (e) {
+      console.warn('[StudioWorkspace] apply_dashboard_filter error:', e);
+    }
 
     const filteredSql = `SELECT * FROM ${activeDataset} WHERE ${column} = '${value}' LIMIT 50;`;
     await handleRunQuery(filteredSql);
@@ -178,7 +204,7 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
 
     try {
       const rows = auraEngine.getTableData(activeDataset);
-      if (rows.length === 0) return;
+      if (!rows || rows.length === 0 || !rows[0]) return;
 
       const firstRow = rows[0];
       const numericCols = Object.keys(firstRow).filter((k) => typeof firstRow[k] === 'number');
@@ -237,7 +263,7 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
     handleRunQuery(customSql);
 
     const rows = auraEngine.getTableData(safeName);
-    if (rows.length > 0) {
+    if (rows.length > 0 && rows[0]) {
       const firstRow = rows[0];
       const stringCols = Object.keys(firstRow).filter((k) => typeof firstRow[k] === 'string');
       const numericCols = Object.keys(firstRow).filter(

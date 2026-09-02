@@ -1,7 +1,6 @@
 import React, { useMemo } from 'react';
-import { TrendingUp, ArrowRight, Sparkles, Database } from 'lucide-react';
+import { TrendingUp, ArrowRight, Database } from 'lucide-react';
 import { auraEngine } from '../../engine/auraql';
-import { DATASETS_METADATA } from '../../engine/datasets';
 
 interface InsightBannerProps {
   dataset: string;
@@ -12,9 +11,8 @@ export const InsightBanner: React.FC<InsightBannerProps> = ({ dataset, onActionC
   const insight = useMemo(() => {
     if (!dataset) return null;
     const rows = auraEngine.getTableData(dataset);
-    if (rows.length === 0) return null;
+    if (!rows || rows.length === 0 || !rows[0]) return null;
 
-    const meta = DATASETS_METADATA[dataset];
     const firstRow = rows[0];
     const numericCols = Object.keys(firstRow).filter((k) => typeof firstRow[k] === 'number');
     const stringCols = Object.keys(firstRow).filter(
@@ -28,6 +26,7 @@ export const InsightBanner: React.FC<InsightBannerProps> = ({ dataset, onActionC
       // Find top dimension by primary metric sum
       const dimSums = new Map<string, number>();
       for (const r of rows) {
+        if (!r) continue;
         const d = String(r[primaryDim] ?? 'Other');
         const v = Number(r[primaryMetric]) || 0;
         dimSums.set(d, (dimSums.get(d) || 0) + v);
@@ -42,20 +41,22 @@ export const InsightBanner: React.FC<InsightBannerProps> = ({ dataset, onActionC
         }
       }
 
-      const totalVal = rows.reduce((s, r) => s + (Number(r[primaryMetric]) || 0), 0);
+      const totalVal = rows.reduce((s, r) => s + (Number(r?.[primaryMetric]) || 0), 0);
       const sharePct = totalVal > 0 ? ((maxVal / totalVal) * 100).toFixed(1) : '0';
 
-      return {
-        badge: 'Automated Columnar Insight',
-        icon: TrendingUp,
-        color: 'text-emerald-600 dark:text-emerald-400',
-        border: 'border-emerald-500/30',
-        bg: 'bg-emerald-50 dark:bg-emerald-950/40',
-        title: `Top Segment in ${dataset}: "${topDim}" leads ${primaryMetric}`,
-        desc: `"${topDim}" accounts for ${sharePct}% of total ${primaryMetric} ($${Math.round(maxVal).toLocaleString()}) across ${rows.length} ingested records.`,
-        actionText: `Filter by "${topDim}"`,
-        sql: `SELECT ${primaryDim}, ROUND(SUM(${primaryMetric}), 2) as total_${primaryMetric} FROM ${dataset} GROUP BY ${primaryDim} ORDER BY total_${primaryMetric} DESC;`
-      };
+      if (dimSums.size > 0 && maxVal > -Infinity && isFinite(maxVal)) {
+        return {
+          badge: 'Automated Columnar Insight',
+          icon: TrendingUp,
+          color: 'text-emerald-600 dark:text-emerald-400',
+          border: 'border-emerald-500/30',
+          bg: 'bg-emerald-50 dark:bg-emerald-950/40',
+          title: `Top Segment in ${dataset}: "${topDim}" leads ${primaryMetric}`,
+          desc: `"${topDim}" accounts for ${sharePct}% of total ${primaryMetric} (${Math.round(maxVal).toLocaleString()}) across ${rows.length} ingested records.`,
+          actionText: `Filter by "${topDim}"`,
+          sql: `SELECT ${primaryDim}, ROUND(SUM(${primaryMetric}), 2) as total_${primaryMetric} FROM ${dataset} GROUP BY ${primaryDim} ORDER BY total_${primaryMetric} DESC;`
+        };
+      }
     }
 
     return {

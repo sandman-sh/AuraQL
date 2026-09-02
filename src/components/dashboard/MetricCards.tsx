@@ -10,23 +10,26 @@ export const MetricCards: React.FC<MetricCardsProps> = ({ tableName }) => {
   const live = auraEngine.computeLiveMetrics(tableName);
 
   const cards = [
-    { ...live.metric1, id: 'm1', icon: DollarSign },
-    { ...live.metric2, id: 'm2', icon: Percent },
-    { ...live.metric3, id: 'm3', icon: Activity },
-    { ...live.metric4, id: 'm4', icon: Zap }
+    { ...(live?.metric1 || { title: 'Total Records', value: '0', sub: '', sparkline: [0, 0] }), id: 'm1', icon: DollarSign },
+    { ...(live?.metric2 || { title: 'Columns', value: '0', sub: '', sparkline: [0, 0] }), id: 'm2', icon: Percent },
+    { ...(live?.metric3 || { title: 'Attributes', value: '0', sub: '', sparkline: [0, 0] }), id: 'm3', icon: Activity },
+    { ...(live?.metric4 || { title: 'Categories', value: '0', sub: '', sparkline: [0, 0] }), id: 'm4', icon: Zap }
   ];
 
   const renderSparkline = (points: number[]) => {
-    if (!points || points.length < 2) return null;
-    const min = Math.min(...points);
-    const max = Math.max(...points);
+    if (!points || !Array.isArray(points)) return null;
+    const valid = points.filter((p) => typeof p === 'number' && !isNaN(p) && isFinite(p));
+    if (valid.length < 2) return null;
+    const min = Math.min(...valid);
+    const max = Math.max(...valid);
     const range = max - min || 1;
     const width = 76;
     const height = 22;
 
-    const coords = points.map((p, i) => {
-      const x = (i / (points.length - 1)) * width;
-      const y = height - ((p - min) / range) * (height - 6) - 3;
+    const coords = valid.map((p, i) => {
+      const x = (i / (valid.length - 1)) * width;
+      const rawY = height - ((p - min) / range) * (height - 6) - 3;
+      const y = isNaN(rawY) ? height / 2 : rawY;
       return `${x},${y}`;
     }).join(' ');
 
@@ -51,31 +54,30 @@ export const MetricCards: React.FC<MetricCardsProps> = ({ tableName }) => {
         return (
           <div
             key={m.id}
-            className="glass-card rounded-none p-4 border border-slate-200 dark:border-white/[0.08] relative group overflow-hidden transition-all duration-200 hover:border-brand-500/50"
+            className="glass-card rounded-none p-4 border border-slate-200 dark:border-white/[0.08] relative overflow-hidden group"
           >
-            {/* Ambient purple background hover glow */}
-            <div className="absolute top-0 right-0 w-24 h-24 bg-brand-600/10 blur-xl group-hover:bg-brand-500/20 transition-all pointer-events-none" />
-
-            <div className="flex items-center justify-between mb-2.5">
-              <span className="text-xs font-mono font-medium text-slate-500 dark:text-slate-400">{m.title}</span>
-              <div className="w-7 h-7 rounded-none bg-brand-50 dark:bg-brand-950/80 border border-brand-200 dark:border-brand-500/30 flex items-center justify-center text-brand-600 dark:text-brand-400">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-mono text-slate-500 dark:text-slate-400 font-medium">
+                {m.title}
+              </span>
+              <div className="p-1.5 rounded-none bg-brand-50 dark:bg-brand-950/80 border border-brand-200 dark:border-brand-500/30 text-brand-600 dark:text-brand-400">
                 <Icon className="w-3.5 h-3.5" />
               </div>
             </div>
 
-            <div className="flex items-baseline justify-between gap-2 mb-2">
-              <span className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight font-mono tabular-nums">
+            <div className="flex items-baseline justify-between">
+              <span className="text-2xl font-black tracking-tight text-slate-900 dark:text-white font-mono">
                 {m.value}
               </span>
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-none bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-300 border border-brand-200 dark:border-brand-500/30 font-bold">
-                LIVE
-              </span>
+              <div className="h-6 flex items-center">{renderSparkline(m.sparkline)}</div>
             </div>
 
-            <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-white/[0.06] text-[11px] font-mono text-slate-500 dark:text-slate-400">
-              <span className="truncate max-w-[150px]">{m.sub}</span>
-              <div className="shrink-0">{renderSparkline(m.sparkline)}</div>
+            <div className="mt-2 text-[10px] font-mono text-slate-500 dark:text-slate-400 truncate">
+              {m.sub}
             </div>
+
+            {/* Micro accent border on hover */}
+            <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-brand-500 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
         );
       })}
