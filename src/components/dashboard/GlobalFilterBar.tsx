@@ -1,6 +1,14 @@
-import React from 'react';
-import { Filter, X, Check, RefreshCw } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { Filter, X, Check } from 'lucide-react';
 import { DatasetId } from '../../types';
+import { auraEngine } from '../../engine/auraql';
+import { DATASETS_METADATA } from '../../engine/datasets';
+
+interface FilterOption {
+  label: string;
+  column: string;
+  value: string;
+}
 
 interface GlobalFilterBarProps {
   dataset: DatasetId;
@@ -15,39 +23,51 @@ export const GlobalFilterBar: React.FC<GlobalFilterBarProps> = ({
   onApplyFilter,
   onClearFilter
 }) => {
-  const getFilterOptions = () => {
-    switch (dataset) {
-      case 'ecommerce':
-        return [
-          { label: 'Region: APAC', column: 'region', value: 'APAC' },
-          { label: 'Region: EMEA', column: 'region', value: 'EMEA' },
-          { label: 'Region: North America', column: 'region', value: 'North America' },
-          { label: 'Customer: VIP Tier', column: 'customer_tier', value: 'VIP' },
-          { label: 'Customer: Enterprise', column: 'customer_tier', value: 'Enterprise' },
-          { label: 'Status: Delivered', column: 'fulfillment_status', value: 'Delivered' }
-        ];
-      case 'churn':
-        return [
-          { label: 'Risk: Critical Severity', column: 'churn_risk', value: 'Critical' },
-          { label: 'Risk: High Alert', column: 'churn_risk', value: 'High' },
-          { label: 'Plan: Enterprise Tier', column: 'plan_tier', value: 'Enterprise' },
-          { label: 'Plan: Growth Plan', column: 'plan_tier', value: 'Growth' },
-          { label: 'Health: Under 50 Index', column: 'health_score', value: '50', op: '<' }
-        ];
-      case 'webvitals':
-        return [
-          { label: 'Device: Mobile Only', column: 'device_type', value: 'Mobile' },
-          { label: 'Device: Desktop Workstations', column: 'device_type', value: 'Desktop' },
-          { label: 'SLA: Poor Performance', column: 'vital_rating', value: 'Poor' },
-          { label: 'Network: 4G Cellular', column: 'network_type', value: '4G' },
-          { label: 'Network: 5G Ultra', column: 'network_type', value: '5G' }
-        ];
-      default:
-        return [];
-    }
-  };
+  // Build filter options dynamically from real unique values in the dataset
+  const options = useMemo<FilterOption[]>(() => {
+    const meta = DATASETS_METADATA[dataset];
+    if (!meta) return [];
+    const tableName = meta.tableName;
 
-  const options = getFilterOptions();
+    if (dataset === 'ecommerce') {
+      const regions = auraEngine.getDistinctValues(tableName, 'region');
+      const tiers = auraEngine.getDistinctValues(tableName, 'customer_tier');
+      return [
+        ...regions.map(v => ({ label: `Region: ${v}`, column: 'region', value: v })),
+        ...tiers.map(v => ({ label: `Tier: ${v}`, column: 'customer_tier', value: v }))
+      ];
+    }
+
+    if (dataset === 'churn') {
+      const risks = auraEngine.getDistinctValues(tableName, 'churn_risk');
+      const plans = auraEngine.getDistinctValues(tableName, 'plan_tier');
+      return [
+        ...risks.map(v => ({ label: `Risk: ${v}`, column: 'churn_risk', value: v })),
+        ...plans.map(v => ({ label: `Plan: ${v}`, column: 'plan_tier', value: v }))
+      ];
+    }
+
+    if (dataset === 'webvitals') {
+      const devices = auraEngine.getDistinctValues(tableName, 'device_type');
+      const nets = auraEngine.getDistinctValues(tableName, 'network_type');
+      const ratings = auraEngine.getDistinctValues(tableName, 'vital_rating');
+      return [
+        ...devices.map(v => ({ label: `Device: ${v}`, column: 'device_type', value: v })),
+        ...ratings.map(v => ({ label: `Rating: ${v}`, column: 'vital_rating', value: v })),
+        ...nets.map(v => ({ label: `Network: ${v}`, column: 'network_type', value: v }))
+      ];
+    }
+
+    // Custom tables: use first string column for filtering
+    const rows = auraEngine.getTableData(tableName);
+    if (rows.length === 0) return [];
+    const stringCols = Object.keys(rows[0]).filter(k => typeof rows[0][k] === 'string');
+    if (stringCols.length === 0) return [];
+    const col = stringCols[0];
+    const vals = auraEngine.getDistinctValues(tableName, col, 8);
+    return vals.map(v => ({ label: `${col}: ${v}`, column: col, value: v }));
+  }, [dataset]);
+
   if (options.length === 0) return null;
 
   return (

@@ -25,10 +25,10 @@ export const WebMcpInspector: React.FC<WebMcpInspectorProps> = ({
     setSimulating(true);
     try {
       if (scenario === 'top_rev') {
-        await webMcp.executeSimulatedTool('execute_sql_query', {
+        await webMcp.executeTool('execute_sql_query', {
           sql: 'SELECT product_category, ROUND(SUM(revenue), 2) as total_rev FROM ecommerce_sales GROUP BY product_category ORDER BY total_rev DESC;'
         });
-        await webMcp.executeSimulatedTool('render_interactive_chart', {
+        await webMcp.executeTool('render_interactive_chart', {
           type: 'bar',
           title: 'Top Performing Categories by Net Revenue',
           xAxis: 'product_category',
@@ -36,10 +36,10 @@ export const WebMcpInspector: React.FC<WebMcpInspectorProps> = ({
           colorTheme: 'purple'
         });
       } else if (scenario === 'critical_churn') {
-        await webMcp.executeSimulatedTool('execute_sql_query', {
+        await webMcp.executeTool('execute_sql_query', {
           sql: 'SELECT company_name, monthly_mrr, health_score FROM saas_churn_metrics WHERE health_score < 45 ORDER BY monthly_mrr DESC LIMIT 8;'
         });
-        await webMcp.executeSimulatedTool('render_interactive_chart', {
+        await webMcp.executeTool('render_interactive_chart', {
           type: 'area',
           title: 'Critical Accounts ARR vs Health Index',
           xAxis: 'company_name',
@@ -47,10 +47,10 @@ export const WebMcpInspector: React.FC<WebMcpInspectorProps> = ({
           colorTheme: 'gradient'
         });
       } else if (scenario === 'vitals_mobile') {
-        await webMcp.executeSimulatedTool('execute_sql_query', {
+        await webMcp.executeTool('execute_sql_query', {
           sql: "SELECT url_path, ROUND(AVG(lcp_ms), 0) as avg_lcp_ms FROM web_vitals_telemetry WHERE device_type = 'Mobile' GROUP BY url_path ORDER BY avg_lcp_ms DESC;"
         });
-        await webMcp.executeSimulatedTool('render_interactive_chart', {
+        await webMcp.executeTool('render_interactive_chart', {
           type: 'donut',
           title: 'Mobile P95 Largest Contentful Paint by Route',
           xAxis: 'url_path',

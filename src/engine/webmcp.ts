@@ -99,7 +99,7 @@ class WebMcpManager {
             columns: d.columns.map(c => `${c.name} (${c.type}): ${c.description}`)
           }));
 
-          const duration = Math.max(1.1, +(performance.now() - startTime).toFixed(1));
+          const duration = +(performance.now() - startTime).toFixed(1);
           this.recordEvent({
             toolName: 'list_tables_and_schema',
             args: input || {},
@@ -199,7 +199,7 @@ class WebMcpManager {
         execute: async (config: ChartConfig) => {
           const startTime = performance.now();
           this.emitStateUpdate('chart', config);
-          const duration = Math.max(2.2, +(performance.now() - startTime).toFixed(1));
+          const duration = +(performance.now() - startTime).toFixed(1);
 
           this.recordEvent({
             toolName: 'render_interactive_chart',
@@ -234,7 +234,7 @@ class WebMcpManager {
         execute: async (filter: { column: string; operator?: string; value: string }) => {
           const startTime = performance.now();
           this.emitStateUpdate('filter', filter);
-          const duration = Math.max(1.8, +(performance.now() - startTime).toFixed(1));
+          const duration = +(performance.now() - startTime).toFixed(1);
 
           this.recordEvent({
             toolName: 'apply_dashboard_filter',
@@ -281,7 +281,13 @@ class WebMcpManager {
     this.registeredTools = tools;
   }
 
-  public async executeSimulatedTool(name: string, args: Record<string, any>) {
+  /**
+   * Executes a registered WebMCP tool by name with the given arguments.
+   * This calls the exact same real tool function that document.modelContext would call —
+   * it is NOT a simulation or mock. The tool runs through AuraQL, records real telemetry,
+   * and emits real state updates to the dashboard.
+   */
+  public async executeTool(name: string, args: Record<string, any>) {
     const tool = this.registeredTools.find(t => t.name === name);
     if (!tool) throw new Error(`Tool ${name} not found`);
     return await tool.execute(args);

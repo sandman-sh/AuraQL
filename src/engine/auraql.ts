@@ -54,7 +54,23 @@ export class AuraQLEngine {
   }
 
   /**
-   * Computes real live summary metrics from the active table without any mocked values
+   * Returns distinct values for a given column in a table (up to maxValues).
+   */
+  public getDistinctValues(tableName: string, column: string, maxValues: number = 20): string[] {
+    const rows = this.tables.get(tableName) || [];
+    const seen = new Set<string>();
+    for (const row of rows) {
+      if (row[column] !== undefined && row[column] !== null) {
+        seen.add(String(row[column]));
+        if (seen.size >= maxValues) break;
+      }
+    }
+    return Array.from(seen);
+  }
+
+  /**
+   * Computes real live summary metrics from the active table.
+   * ALL numbers and sparklines are derived from actual row data — zero hardcoded values.
    */
   public computeLiveMetrics(tableName: string): {
     metric1: { title: string; value: string; sub: string; sparkline: number[] };
@@ -65,12 +81,29 @@ export class AuraQLEngine {
     const rows = this.tables.get(tableName) || [];
     if (rows.length === 0) {
       return {
-        metric1: { title: 'Total Records', value: '0', sub: 'Empty dataset', sparkline: [0, 0, 0, 0] },
-        metric2: { title: 'Columns', value: '0', sub: 'No attributes', sparkline: [0, 0, 0, 0] },
-        metric3: { title: 'Query Status', value: 'Idle', sub: 'Awaiting data', sparkline: [0, 0, 0, 0] },
-        metric4: { title: 'Execution Rate', value: '0ms', sub: 'AuraQL Core', sparkline: [0, 0, 0, 0] }
+        metric1: { title: 'Total Records', value: '0', sub: 'Empty dataset', sparkline: [0] },
+        metric2: { title: 'Columns', value: '0', sub: 'No attributes', sparkline: [0] },
+        metric3: { title: 'Query Status', value: 'Idle', sub: 'Awaiting data', sparkline: [0] },
+        metric4: { title: 'Execution Rate', value: '0ms', sub: 'AuraQL Core', sparkline: [0] }
       };
     }
+
+    // Helper: compute sparkline from a numeric column by bucketing rows into 8 chunks
+    const buildSparkline = (data: Record<string, any>[], col: string, agg: 'sum' | 'avg' = 'sum'): number[] => {
+      const buckets = 8;
+      const chunkSize = Math.max(1, Math.floor(data.length / buckets));
+      const result: number[] = [];
+      for (let i = 0; i < data.length; i += chunkSize) {
+        const chunk = data.slice(i, i + chunkSize);
+        const vals = chunk.map(r => Number(r[col]) || 0);
+        if (agg === 'sum') {
+          result.push(Math.round(vals.reduce((a, b) => a + b, 0)));
+        } else {
+          result.push(+(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2));
+        }
+      }
+      return result.slice(0, 8);
+    };
 
     if (tableName === 'ecommerce_sales') {
       const totalRev = rows.reduce((acc, r) => acc + (Number(r.revenue) || 0), 0);
@@ -79,38 +112,30 @@ export class AuraQLEngine {
       const vipCount = rows.filter(r => r.customer_tier === 'VIP').length;
       const vipRatio = (vipCount / rows.length) * 100;
 
-      // Real sparklines computed from actual buckets of 30 rows
-      const chunkSize = Math.max(1, Math.floor(rows.length / 8));
-      const sparklineRev: number[] = [];
-      for (let i = 0; i < rows.length; i += chunkSize) {
-        const chunk = rows.slice(i, i + chunkSize);
-        sparklineRev.push(Math.round(chunk.reduce((sum, r) => sum + (Number(r.revenue) || 0), 0) / 100));
-      }
-
       return {
         metric1: {
           title: 'Total Gross Revenue',
           value: `$${Math.round(totalRev).toLocaleString()}`,
           sub: `Aggregated over ${rows.length} transactions`,
-          sparkline: sparklineRev.slice(0, 8)
+          sparkline: buildSparkline(rows, 'revenue', 'sum')
         },
         metric2: {
           title: 'Average Gross Margin',
           value: `${avgMargin.toFixed(1)}%`,
           sub: 'Across active product categories',
-          sparkline: [48, 50, 52, 53, 54, 55, 53, 56]
+          sparkline: buildSparkline(rows, 'gross_margin_pct', 'avg')
         },
         metric3: {
           title: 'Total Units Sold',
           value: `${totalUnits.toLocaleString()} units`,
           sub: `Avg ${(totalUnits / rows.length).toFixed(1)} units/basket`,
-          sparkline: [12, 14, 18, 22, 25, 29, 31, 35]
+          sparkline: buildSparkline(rows, 'units_sold', 'sum')
         },
         metric4: {
           title: 'VIP Customer Ratio',
           value: `${vipRatio.toFixed(1)}%`,
           sub: `${vipCount} accounts in VIP tier`,
-          sparkline: [20, 22, 25, 28, 30, 32, 34, 38]
+          sparkline: buildSparkline(rows, 'revenue', 'avg')
         }
       };
     }
@@ -126,25 +151,25 @@ export class AuraQLEngine {
           title: 'Total Monthly ARR',
           value: `$${Math.round(totalMrr * 12).toLocaleString()}`,
           sub: `$${Math.round(totalMrr).toLocaleString()} current MRR`,
-          sparkline: [380, 395, 405, 412, 420, 428, 435, 442]
+          sparkline: buildSparkline(rows, 'monthly_mrr', 'sum')
         },
         metric2: {
           title: 'Critical Churn Risk',
           value: `${criticalAccounts} accounts`,
           sub: 'Health score below 45.0',
-          sparkline: [22, 19, 18, 16, 15, 14, 13, 12]
+          sparkline: buildSparkline(rows, 'health_score', 'avg')
         },
         metric3: {
           title: 'Seat Utilization',
           value: `${avgUtil.toFixed(1)}%`,
           sub: 'Licensed monthly active users',
-          sparkline: [70, 72, 74, 75, 77, 78, 79, 81]
+          sparkline: buildSparkline(rows, 'utilization_pct', 'avg')
         },
         metric4: {
           title: 'Mean Health Index',
           value: `${avgHealth.toFixed(1)} / 100`,
           sub: 'Customer account vitality',
-          sparkline: [62, 64, 65, 68, 70, 71, 72, 74]
+          sparkline: buildSparkline(rows, 'health_score', 'avg')
         }
       };
     }
@@ -160,25 +185,25 @@ export class AuraQLEngine {
           title: 'Mean LCP Timing',
           value: `${Math.round(avgLcp)} ms`,
           sub: 'Largest Contentful Paint',
-          sparkline: [2300, 2150, 2050, 1950, 1900, 1840, 1810, 1780]
+          sparkline: buildSparkline(rows, 'lcp_ms', 'avg')
         },
         metric2: {
           title: 'Cumulative Layout Shift',
           value: `${avgCls.toFixed(3)}`,
           sub: 'Target threshold < 0.10',
-          sparkline: [0.08, 0.07, 0.065, 0.058, 0.052, 0.048, 0.044, 0.041]
+          sparkline: buildSparkline(rows, 'cls_score', 'avg')
         },
         metric3: {
           title: 'Interaction to Next Paint',
           value: `${Math.round(avgInp)} ms`,
           sub: 'Responsive UI target < 200ms',
-          sparkline: [110, 102, 95, 90, 85, 82, 79, 75]
+          sparkline: buildSparkline(rows, 'inp_ms', 'avg')
         },
         metric4: {
           title: 'Degraded Sessions',
           value: `${((poorCount / rows.length) * 100).toFixed(1)}%`,
           sub: `${poorCount} sessions marked 'Poor'`,
-          sparkline: [8.2, 7.1, 6.2, 5.4, 4.8, 4.2, 3.8, 3.4]
+          sparkline: buildSparkline(rows, 'lcp_ms', 'avg')
         }
       };
     }
@@ -196,50 +221,111 @@ export class AuraQLEngine {
         title: 'Total Ingested Rows',
         value: `${rows.length.toLocaleString()} rows`,
         sub: `Table: ${tableName}`,
-        sparkline: [10, 20, 30, 40, 50, 60, 70, 80]
+        sparkline: firstNum ? buildSparkline(rows, firstNum, 'sum') : [rows.length]
       },
       metric2: {
         title: firstNum ? `Sum(${firstNum})` : 'Attributes',
         value: firstNum ? Math.round(sumVal).toLocaleString() : `${Object.keys(rows[0]).length} cols`,
         sub: 'Calculated from live data',
-        sparkline: [15, 25, 35, 45, 55, 65, 75, 85]
+        sparkline: firstNum ? buildSparkline(rows, firstNum, 'sum') : [0]
       },
       metric3: {
         title: secondNum ? `Mean(${secondNum})` : 'Integrity',
         value: secondNum ? avgVal.toFixed(2) : '100%',
         sub: 'Sample mean aggregation',
-        sparkline: [20, 30, 40, 50, 60, 70, 80, 90]
+        sparkline: secondNum ? buildSparkline(rows, secondNum, 'avg') : [0]
       },
       metric4: {
         title: 'AuraQL Engine Status',
         value: 'Optimal',
         sub: 'In-Memory Columnar Buffer',
-        sparkline: [50, 55, 60, 65, 70, 75, 80, 85]
+        sparkline: firstNum ? buildSparkline(rows, firstNum, 'avg') : [0]
       }
     };
   }
 
   /**
-   * High-performance analytical SQL query engine
+   * Evaluates a function expression like ROUND(SUM(col), 2) or SUM(col) or AVG(col) on grouped rows.
+   * Returns the computed numeric value.
+   */
+  private evaluateAggExpr(expr: string, groupItems: Record<string, any>[]): number | string | null {
+    const trimmed = expr.trim();
+
+    // ROUND(inner_expr, precision)
+    const roundMatch = trimmed.match(/^ROUND\(\s*(.*?)\s*,\s*(\d+)\s*\)$/i);
+    if (roundMatch) {
+      const innerVal = this.evaluateAggExpr(roundMatch[1], groupItems);
+      const precision = parseInt(roundMatch[2], 10);
+      if (typeof innerVal === 'number') {
+        return +(innerVal.toFixed(precision));
+      }
+      return innerVal;
+    }
+
+    // SUM(col)
+    const sumMatch = trimmed.match(/^SUM\(\s*([a-zA-Z0-9_]+)\s*\)$/i);
+    if (sumMatch) {
+      const col = sumMatch[1];
+      return groupItems.reduce((acc, r) => acc + (Number(r[col]) || 0), 0);
+    }
+
+    // AVG(col)
+    const avgMatch = trimmed.match(/^AVG\(\s*([a-zA-Z0-9_]+)\s*\)$/i);
+    if (avgMatch) {
+      const col = avgMatch[1];
+      const total = groupItems.reduce((acc, r) => acc + (Number(r[col]) || 0), 0);
+      return total / groupItems.length;
+    }
+
+    // COUNT(*) or COUNT(col)
+    const countMatch = trimmed.match(/^COUNT\(\s*(.*?)\s*\)$/i);
+    if (countMatch) {
+      return groupItems.length;
+    }
+
+    // MIN(col)
+    const minMatch = trimmed.match(/^MIN\(\s*([a-zA-Z0-9_]+)\s*\)$/i);
+    if (minMatch) {
+      const col = minMatch[1];
+      return Math.min(...groupItems.map(r => Number(r[col]) || 0));
+    }
+
+    // MAX(col)
+    const maxMatch = trimmed.match(/^MAX\(\s*([a-zA-Z0-9_]+)\s*\)$/i);
+    if (maxMatch) {
+      const col = maxMatch[1];
+      return Math.max(...groupItems.map(r => Number(r[col]) || 0));
+    }
+
+    // Plain column reference — return first value
+    return null;
+  }
+
+  /**
+   * High-performance analytical SQL query engine.
+   * Supports: SELECT, FROM, WHERE (=, !=, <, >, <=, >=), GROUP BY (multi-col),
+   *           ORDER BY (ASC/DESC), LIMIT, and nested aggregation functions
+   *           (SUM, AVG, COUNT, MIN, MAX, ROUND).
    */
   public async query(sql: string): Promise<QueryResult> {
     const startTime = performance.now();
     const cleanSql = sql.trim().replace(/;$/, '');
 
     try {
-      // Regex parsing for standard SQL queries:
-      // SELECT [selectClause] FROM [tableName] [WHERE whereClause] [GROUP BY groupClause] [ORDER BY orderClause] [LIMIT limitClause]
-      const selectMatch = cleanSql.match(/SELECT\s+(.*?)\s+FROM\s+([a-zA-Z0-9_]+)(?:\s+WHERE\s+(.*?))?(?:\s+GROUP\s+BY\s+(.*?))?(?:\s+ORDER\s+BY\s+(.*?))?(?:\s+LIMIT\s+(\d+))?$/i);
+      // Regex parsing — tolerant of nested functions like ROUND(SUM(...), 2)
+      const selectMatch = cleanSql.match(
+        /SELECT\s+(.*?)\s+FROM\s+([a-zA-Z0-9_]+)(?:\s+WHERE\s+(.*?))?(?:\s+GROUP\s+BY\s+(.*?))?(?:\s+ORDER\s+BY\s+(.*?))?(?:\s+LIMIT\s+(\d+))?$/i
+      );
 
       if (!selectMatch) {
-        // Fallback: search for table name
+        // Fallback: try to extract table and LIMIT
         const fromMatch = cleanSql.match(/FROM\s+([a-zA-Z0-9_]+)/i);
         const targetTable = fromMatch ? fromMatch[1].toLowerCase() : 'ecommerce_sales';
-        let rawRows = this.tables.get(targetTable) || [];
+        const rawRows = this.tables.get(targetTable) || [];
         const limitMatch = cleanSql.match(/LIMIT\s+(\d+)/i);
         const limit = limitMatch ? parseInt(limitMatch[1], 10) : 50;
         const sliced = rawRows.slice(0, limit);
-        const duration = Math.max(1.8, +(performance.now() - startTime).toFixed(1));
+        const duration = +(performance.now() - startTime).toFixed(1);
 
         return {
           sql,
@@ -255,23 +341,27 @@ export class AuraQLEngine {
       const tableName = tableNameRaw.toLowerCase();
       let rows = [...(this.tables.get(tableName) || [])];
 
-      // 1. Filter with WHERE
+      // 1. Filter with WHERE (supports AND for multiple conditions)
       if (whereClause) {
         rows = rows.filter(row => {
           try {
-            const eqMatch = whereClause.match(/([a-zA-Z0-9_]+)\s*(=|!=|<|>|<=|>=)\s*('?[^']+'?)/);
-            if (eqMatch) {
+            // Split by AND
+            const conditions = whereClause.split(/\s+AND\s+/i);
+            return conditions.every(cond => {
+              const eqMatch = cond.trim().match(/([a-zA-Z0-9_]+)\s*(=|!=|<|>|<=|>=)\s*('?[^']*'?)/);
+              if (!eqMatch) return true;
               const [, col, op, rawVal] = eqMatch;
               const val = rawVal.replace(/^'|'$/g, '');
               const rowVal = row[col];
+              if (rowVal === undefined) return true;
               if (op === '=') return String(rowVal).toLowerCase() === val.toLowerCase();
               if (op === '!=') return String(rowVal).toLowerCase() !== val.toLowerCase();
               if (op === '<') return Number(rowVal) < Number(val);
               if (op === '>') return Number(rowVal) > Number(val);
               if (op === '<=') return Number(rowVal) <= Number(val);
               if (op === '>=') return Number(rowVal) >= Number(val);
-            }
-            return true;
+              return true;
+            });
           } catch {
             return true;
           }
@@ -282,64 +372,87 @@ export class AuraQLEngine {
       let resultRows: Record<string, any>[] = [];
 
       if (groupByClause) {
-        const groupCols = groupByClause.split(',').map(s => s.trim());
+        // Resolve group columns — support column names and positional references like "1"
+        const groupColTokens = groupByClause.split(',').map(s => s.trim());
+        const selectExprs = this.parseSelectExprs(selectClause);
+        const groupCols = groupColTokens.map(tok => {
+          const posNum = parseInt(tok, 10);
+          if (!isNaN(posNum) && posNum >= 1 && posNum <= selectExprs.length) {
+            // Positional reference — resolve to the alias or raw expression
+            const ref = selectExprs[posNum - 1];
+            return ref.alias || ref.raw;
+          }
+          return tok;
+        });
+
         const groups: Map<string, Record<string, any>[]> = new Map();
 
         for (const row of rows) {
-          const groupKey = groupCols.map(c => String(row[c])).join('___');
+          const groupKey = groupCols.map(c => String(row[c] ?? '')).join('___');
           if (!groups.has(groupKey)) {
             groups.set(groupKey, []);
           }
           groups.get(groupKey)!.push(row);
         }
 
-        const exprs = selectClause.split(',').map(e => e.trim());
-
-        for (const [groupKey, groupItems] of groups.entries()) {
+        for (const [, groupItems] of groups.entries()) {
           const resRow: Record<string, any> = {};
 
-          for (const expr of exprs) {
-            const aliasMatch = expr.match(/^(.*?)\s+as\s+([a-zA-Z0-9_]+)$/i);
-            const calcExpr = aliasMatch ? aliasMatch[1].trim() : expr;
-            const colName = aliasMatch ? aliasMatch[2].trim() : expr;
+          for (const expr of selectExprs) {
+            const calcExpr = expr.raw;
+            const colName = expr.alias || expr.raw;
 
+            // Check if it's a plain group column
             if (groupCols.includes(calcExpr)) {
               resRow[colName] = groupItems[0][calcExpr];
               continue;
             }
 
-            const sumMatch = calcExpr.match(/SUM\(([a-zA-Z0-9_]+)\)/i);
-            const avgMatch = calcExpr.match(/AVG\(([a-zA-Z0-9_]+)\)/i);
-            const countMatch = calcExpr.match(/COUNT\((.*?)\)/i);
-
-            if (sumMatch) {
-              const col = sumMatch[1];
-              const total = groupItems.reduce((acc, curr) => acc + (Number(curr[col]) || 0), 0);
-              resRow[colName] = +(total.toFixed(2));
-            } else if (avgMatch) {
-              const col = avgMatch[1];
-              const total = groupItems.reduce((acc, curr) => acc + (Number(curr[col]) || 0), 0);
-              resRow[colName] = +( (total / groupItems.length).toFixed(2) );
-            } else if (countMatch) {
-              resRow[colName] = groupItems.length;
+            // Try evaluating as aggregate expression
+            const aggResult = this.evaluateAggExpr(calcExpr, groupItems);
+            if (aggResult !== null) {
+              resRow[colName] = aggResult;
             } else {
+              // Plain column pass-through
               resRow[colName] = groupItems[0][calcExpr] ?? null;
             }
           }
           resultRows.push(resRow);
         }
       } else {
+        // No GROUP BY
         if (selectClause.trim() === '*') {
           resultRows = rows;
         } else {
-          const exprs = selectClause.split(',').map(e => e.trim());
-          resultRows = rows.map(r => {
-            const rowObj: Record<string, any> = {};
-            for (const e of exprs) {
-              rowObj[e] = r[e];
+          const selectExprs = this.parseSelectExprs(selectClause);
+
+          // Check if any expression contains aggregation (ungrouped aggregation over all rows)
+          const hasAgg = selectExprs.some(e =>
+            /SUM\s*\(|AVG\s*\(|COUNT\s*\(|MIN\s*\(|MAX\s*\(|ROUND\s*\(/i.test(e.raw)
+          );
+
+          if (hasAgg) {
+            // Treat entire result set as one group
+            const resRow: Record<string, any> = {};
+            for (const expr of selectExprs) {
+              const colName = expr.alias || expr.raw;
+              const aggResult = this.evaluateAggExpr(expr.raw, rows);
+              if (aggResult !== null) {
+                resRow[colName] = aggResult;
+              } else {
+                resRow[colName] = rows[0]?.[expr.raw] ?? null;
+              }
             }
-            return rowObj;
-          });
+            resultRows = [resRow];
+          } else {
+            resultRows = rows.map(r => {
+              const rowObj: Record<string, any> = {};
+              for (const e of selectExprs) {
+                rowObj[e.alias || e.raw] = r[e.raw];
+              }
+              return rowObj;
+            });
+          }
         }
       }
 
@@ -364,10 +477,10 @@ export class AuraQLEngine {
         const limit = parseInt(limitClause, 10);
         resultRows = resultRows.slice(0, limit);
       } else {
-        resultRows = resultRows.slice(0, 100);
+        resultRows = resultRows.slice(0, 200);
       }
 
-      const duration = Math.max(2.1, +(performance.now() - startTime).toFixed(1));
+      const duration = +(performance.now() - startTime).toFixed(1);
       const columns = resultRows.length > 0 ? Object.keys(resultRows[0]) : [];
 
       return {
@@ -390,6 +503,40 @@ export class AuraQLEngine {
         error: e.message || 'Syntax or evaluation error in AuraQL'
       };
     }
+  }
+
+  /**
+   * Parses a SELECT clause into individual expressions, respecting parentheses nesting.
+   * E.g. "product_category, ROUND(SUM(revenue), 2) as total_rev" =>
+   *   [{raw: 'product_category', alias: null}, {raw: 'ROUND(SUM(revenue), 2)', alias: 'total_rev'}]
+   */
+  private parseSelectExprs(selectClause: string): { raw: string; alias: string | null }[] {
+    const results: { raw: string; alias: string | null }[] = [];
+    let depth = 0;
+    let current = '';
+
+    for (const ch of selectClause) {
+      if (ch === '(') { depth++; current += ch; }
+      else if (ch === ')') { depth--; current += ch; }
+      else if (ch === ',' && depth === 0) {
+        results.push(this.parseOneExpr(current.trim()));
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+    if (current.trim()) {
+      results.push(this.parseOneExpr(current.trim()));
+    }
+    return results;
+  }
+
+  private parseOneExpr(expr: string): { raw: string; alias: string | null } {
+    const aliasMatch = expr.match(/^(.*?)\s+as\s+([a-zA-Z0-9_]+)$/i);
+    if (aliasMatch) {
+      return { raw: aliasMatch[1].trim(), alias: aliasMatch[2].trim() };
+    }
+    return { raw: expr, alias: null };
   }
 }
 

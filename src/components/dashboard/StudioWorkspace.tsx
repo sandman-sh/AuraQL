@@ -21,7 +21,7 @@ interface StudioWorkspaceProps {
 
 export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }) => {
   const [activeDataset, setActiveDataset] = useState<DatasetId>('ecommerce');
-  const [isInspectorOpen, setIsInspectorOpen] = useState<boolean>(true);
+  const [isInspectorOpen, setIsInspectorOpen] = useState<boolean>(false);
   const [isUploadOpen, setIsUploadOpen] = useState<boolean>(false);
   const [isReportOpen, setIsReportOpen] = useState<boolean>(false);
   const [isProcessingAi, setIsProcessingAi] = useState<boolean>(false);
@@ -141,7 +141,7 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
     const meta = DATASETS_METADATA[activeDataset];
     const table = meta?.tableName || 'ecommerce_sales';
 
-    await webMcp.executeSimulatedTool('apply_dashboard_filter', {
+    await webMcp.executeTool('apply_dashboard_filter', {
       column,
       operator: '=',
       value
@@ -152,7 +152,7 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
     if (activeDataset === 'ecommerce') {
       filteredSql = `SELECT product_category, ROUND(SUM(revenue), 2) as total_rev, ROUND(AVG(gross_margin_pct), 1) as avg_margin FROM ${table} WHERE ${column} = '${value}' GROUP BY product_category ORDER BY total_rev DESC;`;
     } else if (activeDataset === 'churn') {
-      filteredSql = `SELECT company_name, monthly_mrr, health_score, utilization_pct FROM ${table} WHERE ${column} = '${value}' ORDER BY monthly_mrr DESC LIMIT 10;`;
+      filteredSql = `SELECT company_name, monthly_mrr, health_score, churn_risk FROM ${table} WHERE ${column} = '${value}' ORDER BY monthly_mrr DESC LIMIT 10;`;
     } else if (activeDataset === 'webvitals') {
       filteredSql = `SELECT url_path, ROUND(AVG(lcp_ms), 0) as avg_lcp_ms, ROUND(AVG(cls_score), 3) as avg_cls FROM ${table} WHERE ${column} = '${value}' GROUP BY url_path ORDER BY avg_lcp_ms DESC;`;
     } else {
@@ -170,7 +170,7 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
     }
   };
 
-  // Natural Language AI Co-Pilot command handler
+  // Natural Language Co-Pilot — maps user intent to real WebMCP tool calls
   const handleExecuteAiPrompt = async (promptText: string) => {
     setIsProcessingAi(true);
     try {
@@ -180,8 +180,8 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
 
       if (lower.includes('category') || lower.includes('product') || (activeDataset === 'ecommerce' && !lower.includes('region'))) {
         const sql = `SELECT product_category, ROUND(SUM(revenue), 2) as total_rev, ROUND(AVG(gross_margin_pct), 1) as avg_margin FROM ${table} GROUP BY product_category ORDER BY total_rev DESC;`;
-        await webMcp.executeSimulatedTool('execute_sql_query', { sql });
-        await webMcp.executeSimulatedTool('render_interactive_chart', {
+        await webMcp.executeTool('execute_sql_query', { sql });
+        await webMcp.executeTool('render_interactive_chart', {
           type: 'bar',
           title: 'Top Product Categories by Net Revenue',
           xAxis: 'product_category',
@@ -190,8 +190,8 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
         });
       } else if (lower.includes('region') || lower.includes('velocity')) {
         const sql = `SELECT region, COUNT(order_id) as total_orders, ROUND(SUM(revenue), 2) as total_revenue FROM ${table} GROUP BY region ORDER BY total_revenue DESC;`;
-        await webMcp.executeSimulatedTool('execute_sql_query', { sql });
-        await webMcp.executeSimulatedTool('render_interactive_chart', {
+        await webMcp.executeTool('execute_sql_query', { sql });
+        await webMcp.executeTool('render_interactive_chart', {
           type: 'donut',
           title: 'Regional Order Velocity & Revenue Share',
           xAxis: 'region',
@@ -200,27 +200,78 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
         });
       } else if (lower.includes('churn') || lower.includes('risk') || lower.includes('health')) {
         const sql = `SELECT company_name, monthly_mrr, health_score FROM saas_churn_metrics WHERE health_score < 45 ORDER BY monthly_mrr DESC LIMIT 8;`;
-        await webMcp.executeSimulatedTool('execute_sql_query', { sql });
-        await webMcp.executeSimulatedTool('render_interactive_chart', {
+        await webMcp.executeTool('execute_sql_query', { sql });
+        await webMcp.executeTool('render_interactive_chart', {
           type: 'area',
           title: 'Critical Accounts ARR & Health Risk Distribution',
           xAxis: 'company_name',
           yAxis: 'monthly_mrr',
           colorTheme: 'purple'
         });
-      } else if (lower.includes('lcp') || lower.includes('device') || lower.includes('vitals')) {
+      } else if (lower.includes('lcp') || lower.includes('device') || lower.includes('vitals') || lower.includes('mobile')) {
         const sql = `SELECT device_type, ROUND(AVG(lcp_ms), 0) as avg_lcp_ms, ROUND(AVG(inp_ms), 0) as avg_inp_ms FROM web_vitals_telemetry GROUP BY device_type;`;
-        await webMcp.executeSimulatedTool('execute_sql_query', { sql });
-        await webMcp.executeSimulatedTool('render_interactive_chart', {
+        await webMcp.executeTool('execute_sql_query', { sql });
+        await webMcp.executeTool('render_interactive_chart', {
           type: 'bar',
           title: 'Core Web Vitals Timing by Hardware Form Factor',
           xAxis: 'device_type',
           yAxis: 'avg_lcp_ms',
           colorTheme: 'purple'
         });
+      } else if (lower.includes('aov') || lower.includes('order value') || lower.includes('tier')) {
+        const sql = `SELECT customer_tier, COUNT(order_id) as order_count, ROUND(AVG(revenue), 2) as avg_order_value FROM ${table} GROUP BY customer_tier;`;
+        await webMcp.executeTool('execute_sql_query', { sql });
+        await webMcp.executeTool('render_interactive_chart', {
+          type: 'donut',
+          title: 'Average Order Value by Customer Tier',
+          xAxis: 'customer_tier',
+          yAxis: 'avg_order_value',
+          colorTheme: 'purple'
+        });
+      } else if (lower.includes('mrr') || lower.includes('seat') || lower.includes('utilization') || lower.includes('plan')) {
+        const sql = `SELECT plan_tier, ROUND(AVG(monthly_mrr), 2) as avg_mrr, ROUND(AVG(utilization_pct), 1) as avg_util FROM saas_churn_metrics GROUP BY plan_tier;`;
+        await webMcp.executeTool('execute_sql_query', { sql });
+        await webMcp.executeTool('render_interactive_chart', {
+          type: 'bar',
+          title: 'Average MRR & Seat Utilization by Plan Tier',
+          xAxis: 'plan_tier',
+          yAxis: 'avg_mrr',
+          colorTheme: 'purple'
+        });
+      } else if (lower.includes('nps') || lower.includes('ticket') || lower.includes('support')) {
+        const sql = `SELECT company_name, nps_score, support_tickets_30d, health_score FROM saas_churn_metrics ORDER BY support_tickets_30d DESC LIMIT 10;`;
+        await webMcp.executeTool('execute_sql_query', { sql });
+        await webMcp.executeTool('render_interactive_chart', {
+          type: 'area',
+          title: 'Highest Support Ticket Volume & NPS Correlation',
+          xAxis: 'company_name',
+          yAxis: 'support_tickets_30d',
+          colorTheme: 'purple'
+        });
+      } else if (lower.includes('route') || lower.includes('poor') || lower.includes('slow')) {
+        const sql = `SELECT url_path, COUNT(*) as incident_count, ROUND(AVG(lcp_ms), 0) as avg_lcp FROM web_vitals_telemetry WHERE vital_rating = 'Poor' GROUP BY url_path ORDER BY incident_count DESC;`;
+        await webMcp.executeTool('execute_sql_query', { sql });
+        await webMcp.executeTool('render_interactive_chart', {
+          type: 'bar',
+          title: 'Routes with Worst Performance SLA',
+          xAxis: 'url_path',
+          yAxis: 'avg_lcp',
+          colorTheme: 'purple'
+        });
+      } else if (lower.includes('network') || lower.includes('4g') || lower.includes('5g') || lower.includes('wifi')) {
+        const sql = `SELECT network_type, ROUND(AVG(lcp_ms), 0) as avg_lcp_ms, COUNT(*) as sample_size FROM web_vitals_telemetry GROUP BY network_type ORDER BY avg_lcp_ms ASC;`;
+        await webMcp.executeTool('execute_sql_query', { sql });
+        await webMcp.executeTool('render_interactive_chart', {
+          type: 'bar',
+          title: 'Network Impact on LCP Latency',
+          xAxis: 'network_type',
+          yAxis: 'avg_lcp_ms',
+          colorTheme: 'purple'
+        });
       } else {
+        // Fallback: run raw SELECT on the active table
         const sql = `SELECT * FROM ${table} LIMIT 25;`;
-        await webMcp.executeSimulatedTool('execute_sql_query', { sql });
+        await webMcp.executeTool('execute_sql_query', { sql });
       }
     } catch (err) {
       console.error('Co-Pilot execution error:', err);
@@ -244,7 +295,7 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
   const activeTableName = currentMeta?.tableName || String(activeDataset);
 
   return (
-    <div className="h-screen w-screen bg-slate-100 dark:bg-dark-950 text-slate-900 dark:text-slate-100 flex flex-col overflow-hidden selection:bg-brand-500/30 selection:text-brand-300 transition-colors">
+    <div className="h-screen w-screen bg-slate-50 dark:bg-dark-950 text-slate-900 dark:text-slate-100 flex flex-col overflow-hidden selection:bg-brand-500/30 selection:text-brand-300 transition-colors">
       {/* Studio Header */}
       <Header
         activeDataset={activeDataset}
@@ -258,10 +309,10 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
         recentToolCallCount={events.length}
       />
 
-      {/* Main Studio Viewport (Fixed Layout) */}
-      <div className="flex-1 flex overflow-hidden relative">
+      {/* Main Studio Viewport */}
+      <div className="flex-1 flex overflow-hidden">
         {/* Main Analytics Scrollable Area */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 min-w-0">
           {/* Natural Language AI Co-Pilot Command Center */}
           <AiCommandBar
             activeDataset={activeDataset}
@@ -269,13 +320,13 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
             isProcessing={isProcessingAi}
           />
 
-          {/* Automated Executive Anomaly & Insights Banner */}
+          {/* Automated Anomaly & Insights Banner — values computed from real data */}
           <InsightBanner
             dataset={activeDataset}
             onActionClick={handleRunQuery}
           />
 
-          {/* Global Multi-Variable Cohort Slicers */}
+          {/* Multi-Variable Cohort Slicers — options from actual distinct values */}
           <GlobalFilterBar
             dataset={activeDataset}
             activeFilter={activeFilter}
@@ -304,7 +355,7 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
             isAgentExecuting={agentUpdated}
           />
 
-          {/* Real Tabular Stream */}
+          {/* Tabular Data Stream */}
           <DataTable
             columns={queryResult.columns}
             rows={queryResult.rows}
@@ -312,13 +363,15 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
           />
         </main>
 
-        {/* WebMCP Telemetry & Agent Simulation Panel */}
-        <WebMcpInspector
-          isOpen={isInspectorOpen}
-          onClose={() => setIsInspectorOpen(false)}
-          events={events}
-          activeDataset={activeDataset}
-        />
+        {/* WebMCP Telemetry & Agent Panel */}
+        {isInspectorOpen && (
+          <WebMcpInspector
+            isOpen={isInspectorOpen}
+            onClose={() => setIsInspectorOpen(false)}
+            events={events}
+            activeDataset={activeDataset}
+          />
+        )}
       </div>
 
       {/* Custom Dataset Upload Modal */}
