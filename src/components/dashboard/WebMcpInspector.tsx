@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
-import { Activity, Zap, Play, Bot, X, Sparkles } from 'lucide-react';
-import { WebMcpToolEvent, DatasetId } from '../../types';
+import { Activity, Zap, Play, Bot, X, Terminal, Code2, Check, Copy, Trash2 } from 'lucide-react';
+import { WebMcpToolEvent } from '../../types';
 import { webMcp } from '../../engine/webmcp';
 
 interface WebMcpInspectorProps {
   isOpen: boolean;
   onClose: () => void;
   events: WebMcpToolEvent[];
-  activeDataset: DatasetId;
+  activeDataset: string;
 }
 
 export const WebMcpInspector: React.FC<WebMcpInspectorProps> = ({
@@ -16,57 +16,87 @@ export const WebMcpInspector: React.FC<WebMcpInspectorProps> = ({
   events,
   activeDataset
 }) => {
-  const [activeTab, setActiveTab] = useState<'stream' | 'simulate' | 'specs'>('stream');
-  const [simulating, setSimulating] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<'stream' | 'runner' | 'specs'>('stream');
+  const [selectedTool, setSelectedTool] = useState<string>('execute_sql_query');
+  const [toolInputJson, setToolInputJson] = useState<string>(
+    JSON.stringify({ sql: `SELECT * FROM ${activeDataset || 'my_table'} LIMIT 10;` }, null, 2)
+  );
+  const [executionResult, setExecutionResult] = useState<string | null>(null);
+  const [isExecuting, setIsExecuting] = useState<boolean>(false);
+  const [copiedCode, setCopiedCode] = useState<boolean>(false);
 
   if (!isOpen) return null;
 
-  const handleSimulateScenario = async (scenario: 'top_rev' | 'critical_churn' | 'vitals_mobile') => {
-    setSimulating(true);
-    try {
-      if (scenario === 'top_rev') {
-        await webMcp.executeTool('execute_sql_query', {
-          sql: 'SELECT product_category, ROUND(SUM(revenue), 2) as total_rev FROM ecommerce_sales GROUP BY product_category ORDER BY total_rev DESC;'
-        });
-        await webMcp.executeTool('render_interactive_chart', {
-          type: 'bar',
-          title: 'Top Performing Categories by Net Revenue',
-          xAxis: 'product_category',
-          yAxis: 'total_rev',
-          colorTheme: 'purple'
-        });
-      } else if (scenario === 'critical_churn') {
-        await webMcp.executeTool('execute_sql_query', {
-          sql: 'SELECT company_name, monthly_mrr, health_score FROM saas_churn_metrics WHERE health_score < 45 ORDER BY monthly_mrr DESC LIMIT 8;'
-        });
-        await webMcp.executeTool('render_interactive_chart', {
-          type: 'area',
-          title: 'Critical Accounts ARR vs Health Index',
-          xAxis: 'company_name',
-          yAxis: 'monthly_mrr',
-          colorTheme: 'gradient'
-        });
-      } else if (scenario === 'vitals_mobile') {
-        await webMcp.executeTool('execute_sql_query', {
-          sql: "SELECT url_path, ROUND(AVG(lcp_ms), 0) as avg_lcp_ms FROM web_vitals_telemetry WHERE device_type = 'Mobile' GROUP BY url_path ORDER BY avg_lcp_ms DESC;"
-        });
-        await webMcp.executeTool('render_interactive_chart', {
-          type: 'donut',
-          title: 'Mobile P95 Largest Contentful Paint by Route',
-          xAxis: 'url_path',
-          yAxis: 'avg_lcp_ms',
-          colorTheme: 'cyan'
-        });
-      }
-    } catch (err) {
-      console.error('Simulation error:', err);
-    } finally {
-      setSimulating(false);
+  const tools = webMcp.getRegisteredTools();
+
+  const handleToolSelect = (toolName: string) => {
+    setSelectedTool(toolName);
+    setExecutionResult(null);
+
+    if (toolName === 'list_tables_and_schema') {
+      setToolInputJson(JSON.stringify({}, null, 2));
+    } else if (toolName === 'execute_sql_query') {
+      setToolInputJson(
+        JSON.stringify({ sql: `SELECT * FROM ${activeDataset || 'my_table'} LIMIT 10;` }, null, 2)
+      );
+    } else if (toolName === 'render_interactive_chart') {
+      setToolInputJson(
+        JSON.stringify(
+          {
+            type: 'bar',
+            title: `Analytics Overview - ${activeDataset || 'Dataset'}`,
+            xAxis: 'category',
+            yAxis: 'value',
+            colorTheme: 'purple'
+          },
+          null,
+          2
+        )
+      );
+    } else if (toolName === 'apply_dashboard_filter') {
+      setToolInputJson(
+        JSON.stringify(
+          {
+            column: 'status',
+            operator: '=',
+            value: 'Active'
+          },
+          null,
+          2
+        )
+      );
     }
   };
 
+  const handleRunTool = async () => {
+    setIsExecuting(true);
+    setExecutionResult(null);
+    try {
+      const parsedArgs = toolInputJson.trim() ? JSON.parse(toolInputJson) : {};
+      const result = await webMcp.callTool(selectedTool, parsedArgs);
+      setExecutionResult(JSON.stringify(result, null, 2));
+    } catch (err: any) {
+      setExecutionResult(JSON.stringify({ error: err.message || 'Execution failed' }, null, 2));
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
+  const sampleSnippet = `// Real WebMCP call via window.modelContext (OpenAI/Browser Agent spec):
+const response = await window.modelContext.callTool('execute_sql_query', {
+  sql: "SELECT * FROM ${activeDataset || 'my_table'} LIMIT 5;"
+});
+
+console.log(response.content[0].text);`;
+
+  const handleCopySnippet = () => {
+    navigator.clipboard.writeText(sampleSnippet);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
+  };
+
   return (
-    <div className="w-full lg:w-96 glass-panel border-l border-slate-200 dark:border-white/[0.08] flex flex-col h-full z-20 shrink-0 bg-white/95 dark:bg-dark-950/95 transition-colors">
+    <div className="w-full lg:w-[420px] glass-panel border-l border-slate-200 dark:border-white/[0.08] flex flex-col h-full z-20 shrink-0 bg-white/95 dark:bg-dark-950/95 transition-colors">
       {/* Inspector Header */}
       <div className="p-3.5 border-b border-slate-200 dark:border-white/[0.08] flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -75,22 +105,25 @@ export const WebMcpInspector: React.FC<WebMcpInspectorProps> = ({
           </div>
           <div>
             <h4 className="text-xs font-bold text-slate-900 dark:text-white font-mono tracking-tight flex items-center gap-1.5">
-              <span>WebMCP Bridge</span>
+              <span>WebMCP Protocol Inspector</span>
               <span className="w-1.5 h-1.5 rounded-none bg-emerald-500 animate-pulse" />
             </h4>
-            <span className="text-[9px] font-mono text-emerald-600 dark:text-emerald-400">document.modelContext active</span>
+            <span className="text-[9px] font-mono text-emerald-600 dark:text-emerald-400">
+              window.modelContext active & listening
+            </span>
           </div>
         </div>
 
         <button
           onClick={onClose}
           className="p-1 rounded-none text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-800"
+          title="Close Inspector"
         >
           <X className="w-4 h-4" />
         </button>
       </div>
 
-      {/* Sharp Tabs */}
+      {/* Navigation Tabs */}
       <div className="flex border-b border-slate-200 dark:border-white/[0.06] bg-slate-100 dark:bg-dark-900/60 p-1 gap-1">
         <button
           onClick={() => setActiveTab('stream')}
@@ -100,17 +133,17 @@ export const WebMcpInspector: React.FC<WebMcpInspectorProps> = ({
               : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
           }`}
         >
-          Live Telemetry ({events.length})
+          Telemetry ({events.length})
         </button>
         <button
-          onClick={() => setActiveTab('simulate')}
+          onClick={() => setActiveTab('runner')}
           className={`flex-1 py-1 text-[11px] font-mono rounded-none transition-colors ${
-            activeTab === 'simulate'
+            activeTab === 'runner'
               ? 'bg-brand-600 text-white font-bold border border-brand-400/40 shadow-sm'
               : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
           }`}
         >
-          Agent Sandbox
+          Tool Runner
         </button>
         <button
           onClick={() => setActiveTab('specs')}
@@ -120,25 +153,34 @@ export const WebMcpInspector: React.FC<WebMcpInspectorProps> = ({
               : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
           }`}
         >
-          Tool Specs
+          Agent Docs
         </button>
       </div>
 
       {/* Tab Contents */}
       <div className="flex-1 overflow-y-auto p-3.5 space-y-3">
+        {/* Stream Tab */}
         {activeTab === 'stream' && (
           <div>
             <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2 flex items-center justify-between">
-              <span>Tool Invocations Stream</span>
-              <span>Execution Duration</span>
+              <span>Live MCP Invocations</span>
+              {events.length > 0 && (
+                <button
+                  onClick={() => webMcp.clearTelemetry()}
+                  className="flex items-center gap-1 text-[10px] text-rose-500 hover:text-rose-600"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <span>Clear</span>
+                </button>
+              )}
             </div>
 
             {events.length === 0 ? (
               <div className="text-center py-12 px-3 rounded-none border border-dashed border-slate-300 dark:border-white/10 text-slate-400 dark:text-slate-500 font-mono text-xs">
                 <Activity className="w-5 h-5 mx-auto mb-2 text-slate-400 dark:text-slate-600 animate-pulse" />
-                <p>Waiting for agent calls via WebMCP...</p>
+                <p>Awaiting incoming WebMCP tool calls...</p>
                 <p className="text-[10px] text-slate-500 dark:text-slate-600 mt-1">
-                  Open in ChatGPT in-app browser or click "Agent Sandbox" to trigger.
+                  Tools are active on <code>window.modelContext</code>. Use the Tool Runner tab or an external agent to invoke.
                 </p>
               </div>
             ) : (
@@ -174,98 +216,124 @@ export const WebMcpInspector: React.FC<WebMcpInspectorProps> = ({
           </div>
         )}
 
-        {activeTab === 'simulate' && (
-          <div className="space-y-3">
-            <div className="p-3 rounded-none bg-brand-50 dark:bg-brand-950/40 border border-brand-200 dark:border-brand-500/30 text-xs text-slate-700 dark:text-slate-300">
-              <span className="font-bold text-brand-700 dark:text-brand-300 flex items-center gap-1 mb-1">
-                <Sparkles className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
-                <span>Agent Simulator Sandbox</span>
+        {/* Real Tool Runner Tab (Developer testing against real WebMCP) */}
+        {activeTab === 'runner' && (
+          <div className="space-y-3 font-mono text-xs">
+            <div className="p-2.5 rounded-none bg-brand-50 dark:bg-brand-950/40 border border-brand-200 dark:border-brand-500/30 text-slate-700 dark:text-slate-300">
+              <span className="font-bold text-brand-700 dark:text-brand-300 flex items-center gap-1 mb-0.5">
+                <Terminal className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
+                <span>WebMCP Protocol Tool Runner</span>
               </span>
-              <p className="text-[11px] text-slate-600 dark:text-slate-400">
-                Trigger exact WebMCP tool calls as if ChatGPT was connected in its in-app browser.
+              <p className="text-[11px] text-slate-600 dark:text-slate-400 font-sans">
+                Invoke real registered WebMCP tools directly against the in-memory engine.
               </p>
             </div>
 
-            <div className="space-y-2">
-              <button
-                disabled={simulating}
-                onClick={() => handleSimulateScenario('top_rev')}
-                className="w-full text-left p-2.5 rounded-none bg-white hover:bg-slate-50 dark:bg-dark-900 dark:hover:bg-dark-850 border border-slate-200 dark:border-white/[0.08] hover:border-brand-500/40 transition-all group shadow-sm"
+            {/* Tool Selection */}
+            <div>
+              <label className="block text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 mb-1">
+                Select WebMCP Tool
+              </label>
+              <select
+                value={selectedTool}
+                onChange={(e) => handleToolSelect(e.target.value)}
+                className="w-full p-2 bg-slate-50 dark:bg-dark-900 border border-slate-300 dark:border-white/10 rounded-none text-xs font-mono text-slate-900 dark:text-white focus:border-brand-500 outline-none"
               >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-bold text-slate-900 dark:text-white text-xs font-mono group-hover:text-brand-600 dark:group-hover:text-brand-300">
-                    1. Query Category Revenues
-                  </span>
-                  <Play className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
-                </div>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Executes aggregation SQL + renders live bar chart on active canvas.
-                </p>
-              </button>
-
-              <button
-                disabled={simulating}
-                onClick={() => handleSimulateScenario('critical_churn')}
-                className="w-full text-left p-2.5 rounded-none bg-white hover:bg-slate-50 dark:bg-dark-900 dark:hover:bg-dark-850 border border-slate-200 dark:border-white/[0.08] hover:border-purple-500/40 transition-all group shadow-sm"
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-bold text-slate-900 dark:text-white text-xs font-mono group-hover:text-purple-600 dark:group-hover:text-purple-300">
-                    2. Isolate At-Risk Churn Accounts
-                  </span>
-                  <Play className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-                </div>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Queries health_score &lt; 45 + renders area distribution chart.
-                </p>
-              </button>
-
-              <button
-                disabled={simulating}
-                onClick={() => handleSimulateScenario('vitals_mobile')}
-                className="w-full text-left p-2.5 rounded-none bg-white hover:bg-slate-50 dark:bg-dark-900 dark:hover:bg-dark-850 border border-slate-200 dark:border-white/[0.08] hover:border-cyan-500/40 transition-all group shadow-sm"
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-bold text-slate-900 dark:text-white text-xs font-mono group-hover:text-cyan-600 dark:group-hover:text-cyan-300">
-                    3. Audit Mobile LCP Route Latency
-                  </span>
-                  <Play className="w-3.5 h-3.5 text-accent-cyan" />
-                </div>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Computes mobile Web Vitals + renders donut distribution of slowest routes.
-                </p>
-              </button>
+                {tools.map((t) => (
+                  <option key={t.name} value={t.name}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
             </div>
+
+            {/* Argument JSON Editor */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">
+                  Input Parameters (JSON)
+                </label>
+                <span className="text-[9px] text-slate-400">Standard MCP inputSchema</span>
+              </div>
+              <textarea
+                value={toolInputJson}
+                onChange={(e) => setToolInputJson(e.target.value)}
+                rows={5}
+                className="w-full p-2 bg-slate-900 text-emerald-400 border border-slate-700 rounded-none font-mono text-[11px] leading-relaxed outline-none focus:border-brand-500 resize-y"
+                placeholder="Enter tool arguments in JSON format..."
+              />
+            </div>
+
+            {/* Execute Button */}
+            <button
+              onClick={handleRunTool}
+              disabled={isExecuting}
+              className="w-full py-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white font-mono text-xs font-bold rounded-none flex items-center justify-center gap-1.5 shadow-sm shadow-brand-600/30 transition-colors"
+            >
+              <Play className="w-3.5 h-3.5 fill-current" />
+              <span>{isExecuting ? 'Executing...' : 'Invoke WebMCP Tool'}</span>
+            </button>
+
+            {/* Raw MCP Response */}
+            {executionResult && (
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 mb-1">
+                  MCP Protocol Response Payload
+                </label>
+                <div className="p-2.5 bg-slate-950 text-slate-300 border border-slate-800 rounded-none overflow-x-auto max-h-56 text-[10px] font-mono leading-tight">
+                  <pre>{executionResult}</pre>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
+        {/* Specs & Agent Connection Tab */}
         {activeTab === 'specs' && (
-          <div className="space-y-2.5 font-mono text-xs">
-            <div className="p-2.5 rounded-none bg-white dark:bg-dark-900 border border-slate-200 dark:border-white/[0.06] shadow-sm">
-              <div className="text-brand-700 dark:text-brand-300 font-bold mb-0.5">list_tables_and_schema</div>
-              <p className="text-[11px] text-slate-600 dark:text-slate-400 font-sans">
-                Exposes available dataset tables, column definitions, data types, and row counts.
-              </p>
+          <div className="space-y-3 font-mono text-xs">
+            <div className="p-2.5 rounded-none bg-slate-50 dark:bg-dark-900 border border-slate-200 dark:border-white/[0.08]">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1 text-[11px]">
+                  <Code2 className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
+                  <span>Agent Invocation Snippet</span>
+                </span>
+                <button
+                  onClick={handleCopySnippet}
+                  className="flex items-center gap-1 text-[10px] text-brand-600 dark:text-brand-400 hover:underline"
+                >
+                  {copiedCode ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                  <span>{copiedCode ? 'Copied' : 'Copy'}</span>
+                </button>
+              </div>
+              <div className="p-2 bg-slate-950 text-emerald-400 rounded-none overflow-x-auto text-[10px]">
+                <pre>{sampleSnippet}</pre>
+              </div>
             </div>
 
-            <div className="p-2.5 rounded-none bg-white dark:bg-dark-900 border border-slate-200 dark:border-white/[0.06] shadow-sm">
-              <div className="text-brand-700 dark:text-brand-300 font-bold mb-0.5">execute_sql_query(sql)</div>
-              <p className="text-[11px] text-slate-600 dark:text-slate-400 font-sans">
-                Executes OLAP SQL directly inside client AuraQL core in &lt;10ms and returns structured records.
-              </p>
-            </div>
+            <div className="space-y-2">
+              <div className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">
+                Registered Tool Definitions ({tools.length})
+              </div>
 
-            <div className="p-2.5 rounded-none bg-white dark:bg-dark-900 border border-slate-200 dark:border-white/[0.06] shadow-sm">
-              <div className="text-brand-700 dark:text-brand-300 font-bold mb-0.5">render_interactive_chart(type, x, y)</div>
-              <p className="text-[11px] text-slate-600 dark:text-slate-400 font-sans">
-                Commands the live browser viewport to render Bar, Area, Line, or Donut visualizations.
-              </p>
-            </div>
-
-            <div className="p-2.5 rounded-none bg-white dark:bg-dark-900 border border-slate-200 dark:border-white/[0.06] shadow-sm">
-              <div className="text-brand-700 dark:text-brand-300 font-bold mb-0.5">apply_dashboard_filter(col, val)</div>
-              <p className="text-[11px] text-slate-600 dark:text-slate-400 font-sans">
-                Slices and filters the active dataset metrics and tabular view.
-              </p>
+              {tools.map((t) => (
+                <div
+                  key={t.name}
+                  className="p-2.5 rounded-none bg-white dark:bg-dark-900 border border-slate-200 dark:border-white/[0.06] shadow-sm"
+                >
+                  <div className="text-brand-700 dark:text-brand-300 font-bold mb-0.5 text-[11px]">
+                    {t.name}
+                  </div>
+                  <p className="text-[10px] text-slate-600 dark:text-slate-400 font-sans leading-relaxed mb-1.5">
+                    {t.description}
+                  </p>
+                  <div className="text-[9px] text-slate-500 dark:text-slate-400">
+                    Required:{' '}
+                    <span className="text-brand-600 dark:text-brand-400">
+                      {t.inputSchema.required?.join(', ') || 'None'}
+                    </span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}

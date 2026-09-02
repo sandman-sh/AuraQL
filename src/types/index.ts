@@ -1,4 +1,4 @@
-export type DatasetId = 'ecommerce' | 'churn' | 'webvitals' | 'custom';
+export type DatasetId = string;
 
 export interface ColumnDefinition {
   name: string;
@@ -7,7 +7,7 @@ export interface ColumnDefinition {
 }
 
 export interface DatasetMetadata {
-  id: DatasetId;
+  id?: string;
   name: string;
   tableName: string;
   category: string;
@@ -37,16 +37,6 @@ export interface ChartConfig {
   categoryKey?: string;
   colorTheme?: 'purple' | 'cyan' | 'emerald' | 'gradient';
   description?: string;
-}
-
-export interface MetricCardData {
-  id: string;
-  title: string;
-  value: string;
-  change: string;
-  isPositive: boolean;
-  sublabel: string;
-  sparkline: number[];
 }
 
 export interface WebMcpToolEvent {

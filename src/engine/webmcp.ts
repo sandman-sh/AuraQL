@@ -22,7 +22,10 @@ class WebMcpManager {
 
   private detectCapabilities() {
     if (typeof window !== 'undefined') {
-      this.isNativeSupported = 'modelContext' in document || 'modelContext' in navigator;
+      this.isNativeSupported =
+        'modelContext' in document ||
+        'modelContext' in navigator ||
+        'modelContext' in window;
     }
   }
 
@@ -40,6 +43,14 @@ class WebMcpManager {
     return [...this.eventHistory];
   }
 
+  public getRegisteredTools(): WebMcpToolRegistration[] {
+    return [...this.registeredTools];
+  }
+
+  public clearTelemetry() {
+    this.eventHistory = [];
+  }
+
   private recordEvent(event: Omit<WebMcpToolEvent, 'id' | 'timestamp'>) {
     const fullEvent: WebMcpToolEvent = {
       ...event,
@@ -47,83 +58,102 @@ class WebMcpManager {
       timestamp: new Date()
     };
     this.eventHistory.unshift(fullEvent);
-    if (this.eventHistory.length > 50) this.eventHistory.pop();
+    if (this.eventHistory.length > 100) this.eventHistory.pop();
 
-    this.eventListeners.forEach(fn => {
+    this.eventListeners.forEach((fn) => {
       try {
         fn(fullEvent);
       } catch (e) {
-        console.error('Error in WebMCP event listener:', e);
+        console.error('[WebMCP] Event listener error:', e);
       }
     });
   }
 
   private emitStateUpdate(type: 'query' | 'chart' | 'filter' | 'dataset', data: any) {
-    this.stateListeners.forEach(fn => {
+    this.stateListeners.forEach((fn) => {
       try {
         fn({ type, data });
       } catch (e) {
-        console.error('Error in WebMCP state listener:', e);
+        console.error('[WebMCP] State listener error:', e);
       }
     });
   }
 
+  /**
+   * Registers all standard WebMCP tools.
+   * Exposes them to window.modelContext & document.modelContext according to the WebMCP protocol.
+   */
   public registerAllTools() {
     this.abortController.abort();
     this.abortController = new AbortController();
 
     const tools: WebMcpToolRegistration[] = [
-      // Tool 1: List Datasets and Schema
+      // Tool 1: List all available tables and schemas in AuraQL
       {
         name: 'list_tables_and_schema',
-        description: 'Returns available dataset tables, column definitions, data types, and row counts in the active in-memory AuraQL engine.',
+        description:
+          'Returns all active tables, column names, data types, and row counts in the in-memory AuraQL engine.',
         inputSchema: {
           type: 'object',
           properties: {
-            datasetId: {
+            tableName: {
               type: 'string',
-              description: 'Optional filter for specific dataset (ecommerce, churn, webvitals)'
+              description: 'Optional: name of a specific table to inspect'
             }
           }
         },
-        execute: async (input: { datasetId?: string }) => {
+        execute: async (input: { tableName?: string }) => {
           const startTime = performance.now();
-          const target = input?.datasetId && DATASETS_METADATA[input.datasetId] 
-            ? { [input.datasetId]: DATASETS_METADATA[input.datasetId] }
-            : DATASETS_METADATA;
 
-          const summary = Object.values(target).map(d => ({
-            table: d.tableName,
-            category: d.category,
-            rowCount: d.rowCount,
-            columns: d.columns.map(c => `${c.name} (${c.type}): ${c.description}`)
-          }));
+          let tables: Array<{
+            table: string;
+            rowCount: number;
+            columns: string[];
+          }> = [];
+
+          if (input?.tableName && DATASETS_METADATA[input.tableName]) {
+            const d = DATASETS_METADATA[input.tableName];
+            tables = [
+              {
+                table: d.tableName,
+                rowCount: d.rowCount,
+                columns: d.columns.map((c) => `${c.name} (${c.type})`)
+              }
+            ];
+          } else {
+            tables = Object.values(DATASETS_METADATA).map((d) => ({
+              table: d.tableName,
+              rowCount: d.rowCount,
+              columns: d.columns.map((c) => `${c.name} (${c.type})`)
+            }));
+          }
 
           const duration = +(performance.now() - startTime).toFixed(1);
           this.recordEvent({
             toolName: 'list_tables_and_schema',
             args: input || {},
-            resultSummary: `Returned schema for ${Object.keys(target).length} tables`,
+            resultSummary: `Schema returned for ${tables.length} table(s)`,
             durationMs: duration,
             status: 'success'
           });
 
           return {
-            content: [{ type: 'text', text: JSON.stringify(summary, null, 2) }]
+            content: [{ type: 'text', text: JSON.stringify(tables, null, 2) }]
           };
         }
       },
 
-      // Tool 2: Execute SQL Query in AuraQL
+      // Tool 2: Execute real analytical SQL query against AuraQL
       {
         name: 'execute_sql_query',
-        description: 'Executes an analytical SQL query against the in-memory AuraQL database and returns structured records in milliseconds.',
+        description:
+          'Executes an analytical SQL query against client in-memory AuraQL columnar tables. Supports SELECT, WHERE, GROUP BY, ORDER BY, LIMIT, and aggregate functions (SUM, AVG, COUNT, MIN, MAX, ROUND).',
         inputSchema: {
           type: 'object',
           properties: {
             sql: {
               type: 'string',
-              description: 'Standard AuraQL SQL query (e.g., SELECT category, SUM(revenue) FROM ecommerce_sales GROUP BY 1)'
+              description: 'SQL query to execute (e.g. SELECT category, SUM(revenue) FROM sales GROUP BY 1)'
             }
           },
           required: ['sql']
@@ -131,12 +161,17 @@ class WebMcpManager {
         execute: async ({ sql }: { sql: string }) => {
           const startTime = performance.now();
           const result: QueryResult = await auraEngine.query(sql);
-          const duration = Math.max(result.executionTimeMs, +(performance.now() - startTime).toFixed(1));
+          const duration = Math.max(
+            result.executionTimeMs,
+            +(performance.now() - startTime).toFixed(1)
+          );
 
           this.recordEvent({
             toolName: 'execute_sql_query',
             args: { sql },
-            resultSummary: result.error ? `Error: ${result.error}` : `Returned ${result.rowCount} live rows in ${duration}ms`,
+            resultSummary: result.error
+              ? `SQL Error: ${result.error}`
+              : `Evaluated ${result.rowCount} live rows in ${duration}ms`,
             durationMs: duration,
             status: result.error ? 'error' : 'success'
           });
@@ -146,52 +181,59 @@ class WebMcpManager {
           if (result.error) {
             return {
               isError: true,
-              content: [{ type: 'text', text: `SQL Evaluation Failed: ${result.error}` }]
+              content: [{ type: 'text', text: `Query Execution Failed: ${result.error}` }]
             };
           }
 
           return {
-            content: [{
-              type: 'text',
-              text: JSON.stringify({
-                rowCount: result.rowCount,
-                executionTimeMs: result.executionTimeMs,
-                columns: result.columns,
-                rows: result.rows.slice(0, 50)
-              }, null, 2)
-            }]
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  {
+                    rowCount: result.rowCount,
+                    executionTimeMs: result.executionTimeMs,
+                    columns: result.columns,
+                    rows: result.rows.slice(0, 50)
+                  },
+                  null,
+                  2
+                )
+              }
+            ]
           };
         }
       },
 
-      // Tool 3: Render Interactive Chart
+      // Tool 3: Render interactive visualization in browser viewport
       {
         name: 'render_interactive_chart',
-        description: 'Directly commands the live browser viewport to render or update a visualization (bar, line, area, donut, or scatter).',
+        description:
+          'Directly updates the live browser viewport to render or modify a chart (bar, line, area, donut, scatter) mapped to active query columns.',
         inputSchema: {
           type: 'object',
           properties: {
             type: {
               type: 'string',
               enum: ['bar', 'line', 'area', 'donut', 'scatter'],
-              description: 'Visualization format'
+              description: 'Format of the visualization'
             },
             title: {
               type: 'string',
-              description: 'Visual heading for the chart'
+              description: 'Human-readable title displayed on the chart header'
             },
             xAxis: {
               type: 'string',
-              description: 'Column to map to the X category axis'
+              description: 'Column name mapped to X-axis / category dimension'
             },
             yAxis: {
               type: 'string',
-              description: 'Column to map to the Y metric axis'
+              description: 'Column name mapped to Y-axis / numeric metric'
             },
             colorTheme: {
               type: 'string',
               enum: ['purple', 'cyan', 'emerald', 'gradient'],
-              description: 'Color styling'
+              description: 'Color styling for the rendered series'
             }
           },
           required: ['type', 'title', 'xAxis', 'yAxis']
@@ -204,30 +246,43 @@ class WebMcpManager {
           this.recordEvent({
             toolName: 'render_interactive_chart',
             args: config,
-            resultSummary: `Rendered ${config.type.toUpperCase()} chart: "${config.title}" [X: ${config.xAxis}, Y: ${config.yAxis}]`,
+            resultSummary: `Rendered ${config.type.toUpperCase()}: "${config.title}" [X: ${config.xAxis}, Y: ${config.yAxis}]`,
             durationMs: duration,
             status: 'success'
           });
 
           return {
-            content: [{
-              type: 'text',
-              text: `Rendered ${config.type} chart: "${config.title}". Viewport updated live on screen.`
-            }]
+            content: [
+              {
+                type: 'text',
+                text: `Chart Viewport updated: ${config.type} "${config.title}". Mapped [${config.xAxis}] to [${config.yAxis}].`
+              }
+            ]
           };
         }
       },
 
-      // Tool 4: Apply Dashboard Filter Slice
+      // Tool 4: Apply dashboard filter slice
       {
         name: 'apply_dashboard_filter',
-        description: 'Filters the active analytics view to isolate a specific cohort, region, or segment.',
+        description:
+          'Applies a cohort or segment filter to the live dashboard view.',
         inputSchema: {
           type: 'object',
           properties: {
-            column: { type: 'string', description: 'Column to filter on' },
-            operator: { type: 'string', enum: ['=', '!=', '>', '<', 'LIKE'], description: 'Comparison operator' },
-            value: { type: 'string', description: 'Filter target value' }
+            column: {
+              type: 'string',
+              description: 'Table column to filter on'
+            },
+            operator: {
+              type: 'string',
+              enum: ['=', '!=', '>', '<', 'LIKE'],
+              description: 'Comparison operator'
+            },
+            value: {
+              type: 'string',
+              description: 'Target value to isolate'
+            }
           },
           required: ['column', 'value']
         },
@@ -239,57 +294,89 @@ class WebMcpManager {
           this.recordEvent({
             toolName: 'apply_dashboard_filter',
             args: filter,
-            resultSummary: `Applied filter: ${filter.column} ${filter.operator || '='} "${filter.value}"`,
+            resultSummary: `Filter applied: ${filter.column} ${filter.operator || '='} "${filter.value}"`,
             durationMs: duration,
             status: 'success'
           });
 
           return {
-            content: [{
-              type: 'text',
-              text: `Dashboard filter set: ${filter.column} ${filter.operator || '='} ${filter.value}.`
-            }]
+            content: [
+              {
+                type: 'text',
+                text: `Dashboard filter active: ${filter.column} ${filter.operator || '='} ${filter.value}.`
+              }
+            ]
           };
         }
       }
     ];
 
-    // Attempt native registration if document.modelContext exists
-    const doc = typeof document !== 'undefined' ? (document as any) : null;
-    const modelContext = doc?.modelContext || (typeof navigator !== 'undefined' ? (navigator as any).modelContext : null);
+    this.registeredTools = tools;
 
-    if (modelContext && typeof modelContext.registerTool === 'function') {
-      try {
-        for (const tool of tools) {
-          modelContext.registerTool(
-            {
-              name: tool.name,
-              description: tool.description,
-              inputSchema: tool.inputSchema,
-              execute: tool.execute
-            },
-            { signal: this.abortController.signal }
-          );
+    // ─── Real WebMCP Standard Protocol Binding ───
+    const self = this;
+    const modelContextHost = {
+      registerTool: (tool: any) => {
+        self.registeredTools.push(tool);
+      },
+      listTools: () => self.registeredTools,
+      callTool: (name: string, args: Record<string, any>) => self.callTool(name, args),
+      executeTool: (name: string, args: Record<string, any>) => self.callTool(name, args),
+      get tools() {
+        return self.registeredTools;
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      (window as any).modelContext = modelContextHost;
+      (window as any).auraMcp = self;
+
+      if (typeof document !== 'undefined') {
+        const doc = document as any;
+        if (!doc.modelContext) {
+          doc.modelContext = modelContextHost;
+        } else if (typeof doc.modelContext.registerTool === 'function') {
+          // Native browser agent has already injected document.modelContext
+          try {
+            for (const tool of tools) {
+              doc.modelContext.registerTool(
+                {
+                  name: tool.name,
+                  description: tool.description,
+                  inputSchema: tool.inputSchema,
+                  execute: tool.execute
+                },
+                { signal: this.abortController.signal }
+              );
+            }
+            this.isNativeSupported = true;
+            console.log('⚡ [WebMCP] Native document.modelContext detected & registered');
+          } catch (e) {
+            console.warn('[WebMCP] Native registration:', e);
+          }
         }
-        this.isNativeSupported = true;
-        console.log('⚡ [WebMCP] Successfully registered tools with document.modelContext');
-      } catch (err) {
-        console.warn('⚡ [WebMCP] Native tool registration:', err);
       }
     }
-
-    this.registeredTools = tools;
   }
 
   /**
-   * Executes a registered WebMCP tool by name with the given arguments.
-   * This calls the exact same real tool function that document.modelContext would call —
-   * it is NOT a simulation or mock. The tool runs through AuraQL, records real telemetry,
-   * and emits real state updates to the dashboard.
+   * Real standard MCP Tool Execution method.
+   * Callable by browser agents via `window.modelContext.callTool(name, args)`
+   * or by internal devtools.
    */
-  public async executeTool(name: string, args: Record<string, any>) {
-    const tool = this.registeredTools.find(t => t.name === name);
-    if (!tool) throw new Error(`Tool ${name} not found`);
+  public async callTool(name: string, args: Record<string, any>) {
+    const tool = this.registeredTools.find((t) => t.name === name);
+    if (!tool) {
+      const errorMsg = `WebMCP Error: Tool "${name}" is not registered. Available tools: ${this.registeredTools.map((t) => t.name).join(', ')}`;
+      this.recordEvent({
+        toolName: name,
+        args: args || {},
+        resultSummary: errorMsg,
+        durationMs: 0.1,
+        status: 'error'
+      });
+      return { isError: true, content: [{ type: 'text', text: errorMsg }] };
+    }
     return await tool.execute(args);
   }
 }

@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Terminal, Play, Zap, Copy, Check } from 'lucide-react';
 import { DATASETS_METADATA } from '../../engine/datasets';
-import { DatasetId } from '../../types';
 
 interface SqlConsoleProps {
-  activeDataset: DatasetId;
+  activeDataset: string;
   currentSql: string;
   onRunSql: (sql: string) => void;
   executionTimeMs: number;
@@ -43,9 +42,13 @@ export const SqlConsole: React.FC<SqlConsoleProps> = ({
   };
 
   return (
-    <div className={`glass-card rounded-none p-4 border transition-all duration-200 ${
-      isAgentExecuting ? 'border-brand-500 ring-1 ring-brand-500/40 glow-purple-sm' : 'border-slate-200 dark:border-white/[0.08]'
-    }`}>
+    <div
+      className={`glass-card rounded-none p-4 border transition-all duration-200 ${
+        isAgentExecuting
+          ? 'border-brand-500 ring-1 ring-brand-500/40 glow-purple-sm'
+          : 'border-slate-200 dark:border-white/[0.08]'
+      }`}
+    >
       {/* Console Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-2.5">
         <div className="flex items-center gap-2">
@@ -53,76 +56,91 @@ export const SqlConsole: React.FC<SqlConsoleProps> = ({
             <Terminal className="w-3 h-3" />
           </div>
           <span className="text-xs font-bold font-mono text-slate-900 dark:text-white tracking-wide">
-            AuraQL Editor
+            AuraQL SQL Console
           </span>
-          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-none bg-slate-100 dark:bg-dark-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-white/10">
-            {meta?.tableName}
-          </span>
+          {activeDataset && (
+            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-none bg-slate-100 dark:bg-dark-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-white/10">
+              {activeDataset}
+            </span>
+          )}
+          {isAgentExecuting && (
+            <span className="text-[10px] font-mono text-brand-600 dark:text-brand-400 animate-pulse flex items-center gap-1 font-bold">
+              <Zap className="w-2.5 h-2.5" />
+              <span>WebMCP Invoking</span>
+            </span>
+          )}
         </div>
 
-        {/* Execution Telemetry */}
-        <div className="flex items-center gap-2">
-          {rowCount > 0 && (
-            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-none bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-[10px] font-mono">
-              <Zap className="w-3 h-3 text-emerald-500 dark:text-emerald-400" />
-              <span>⚡ {executionTimeMs}ms (AuraQL Core)</span>
-              <span className="text-emerald-500">•</span>
-              <span>{rowCount} live rows</span>
-            </div>
-          )}
+        {/* Execution Stats & Copy */}
+        <div className="flex items-center gap-3 text-xs font-mono">
+          <div className="text-slate-500 dark:text-slate-400 text-[11px] hidden sm:flex items-center gap-2">
+            <span>
+              Latency:{' '}
+              <strong className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                {executionTimeMs}ms
+              </strong>
+            </span>
+            <span>•</span>
+            <span>
+              Records:{' '}
+              <strong className="text-slate-900 dark:text-white font-semibold">{rowCount}</strong>
+            </span>
+          </div>
 
           <button
             onClick={handleCopy}
-            className="p-1 rounded-none text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-800 transition-colors"
-            title="Copy Query"
+            className="p-1 rounded-none text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-800 transition-colors"
+            title="Copy SQL Query"
           >
-            {copied ? <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+            {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
           </button>
         </div>
       </div>
 
-      {/* SQL Textarea */}
-      <div className="relative mb-2.5">
+      {/* SQL Editor Surface */}
+      <div className="relative">
         <textarea
           value={editorSql}
           onChange={(e) => setEditorSql(e.target.value)}
           onKeyDown={handleKeyDown}
-          rows={2}
+          rows={3}
+          className="w-full p-3 font-mono text-xs bg-slate-900 text-slate-100 border border-slate-700/80 rounded-none focus:outline-none focus:border-brand-500 transition-colors leading-relaxed selection:bg-brand-500/40 selection:text-white resize-y"
+          placeholder="SELECT * FROM my_table WHERE ...;"
           spellCheck={false}
-          className="w-full bg-slate-50 dark:bg-dark-950 rounded-none p-3 text-xs font-mono text-slate-800 dark:text-brand-300 border border-slate-300 dark:border-white/10 focus:border-brand-500 focus:ring-0 outline-none resize-y transition-all leading-relaxed"
-          placeholder="Type AuraQL query... (e.g., SELECT * FROM ecommerce_sales LIMIT 20;)"
         />
-        <div className="absolute right-2.5 bottom-2.5 text-[9px] font-mono text-slate-400 dark:text-slate-500 pointer-events-none hidden sm:block">
-          Ctrl+Enter to run
+
+        <div className="absolute right-3 bottom-3 flex items-center gap-2">
+          <span className="text-[10px] font-mono text-slate-400 hidden sm:inline">Ctrl + Enter</span>
+          <button
+            onClick={() => onRunSql(editorSql)}
+            className="btn-sharp px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-mono font-bold flex items-center gap-1.5 shadow-sm shadow-brand-600/30 transition-all border border-brand-400/40"
+          >
+            <Play className="w-3 h-3 fill-current" />
+            <span>Execute SQL</span>
+          </button>
         </div>
       </div>
 
-      {/* Snippets & Execute Button */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5">
-        <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 max-w-full">
-          <span className="text-[10px] font-mono text-slate-500 uppercase shrink-0">Templates:</span>
-          {meta?.sampleQueries.map((q, idx) => (
+      {/* Sample Query Shortcuts */}
+      {meta && meta.sampleQueries && meta.sampleQueries.length > 0 && (
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+          <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
+            Quick Queries:
+          </span>
+          {meta.sampleQueries.map((q, idx) => (
             <button
               key={idx}
               onClick={() => {
                 setEditorSql(q.sql);
                 onRunSql(q.sql);
               }}
-              className="px-2 py-1 rounded-none text-[10px] font-mono bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-700 dark:bg-dark-900 dark:hover:bg-brand-950 dark:hover:text-brand-300 dark:text-slate-300 border border-slate-200 dark:border-white/[0.08] hover:border-brand-400 transition-all shrink-0"
+              className="px-2 py-0.5 text-[10px] font-mono bg-slate-100 hover:bg-slate-200 dark:bg-dark-900 dark:hover:bg-dark-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10 hover:border-brand-500/40 transition-colors rounded-none"
             >
               {q.title}
             </button>
           ))}
         </div>
-
-        <button
-          onClick={() => onRunSql(editorSql)}
-          className="px-4 py-1.5 rounded-none bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs font-mono flex items-center gap-1.5 shadow-md shadow-brand-600/30 transition-all active:scale-[0.98] shrink-0 border border-brand-400/40"
-        >
-          <Play className="w-3.5 h-3.5" />
-          <span>Execute AuraQL</span>
-        </button>
-      </div>
+      )}
     </div>
   );
 };

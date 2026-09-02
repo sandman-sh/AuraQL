@@ -1,8 +1,6 @@
 import React, { useMemo } from 'react';
 import { Filter, X, Check } from 'lucide-react';
-import { DatasetId } from '../../types';
 import { auraEngine } from '../../engine/auraql';
-import { DATASETS_METADATA } from '../../engine/datasets';
 
 interface FilterOption {
   label: string;
@@ -11,7 +9,7 @@ interface FilterOption {
 }
 
 interface GlobalFilterBarProps {
-  dataset: DatasetId;
+  dataset: string;
   activeFilter: { column: string; value: string } | null;
   onApplyFilter: (column: string, value: string) => void;
   onClearFilter: () => void;
@@ -23,49 +21,29 @@ export const GlobalFilterBar: React.FC<GlobalFilterBarProps> = ({
   onApplyFilter,
   onClearFilter
 }) => {
-  // Build filter options dynamically from real unique values in the dataset
+  // Discovers filter options dynamically from real unique values in whatever table is loaded
   const options = useMemo<FilterOption[]>(() => {
-    const meta = DATASETS_METADATA[dataset];
-    if (!meta) return [];
-    const tableName = meta.tableName;
-
-    if (dataset === 'ecommerce') {
-      const regions = auraEngine.getDistinctValues(tableName, 'region');
-      const tiers = auraEngine.getDistinctValues(tableName, 'customer_tier');
-      return [
-        ...regions.map(v => ({ label: `Region: ${v}`, column: 'region', value: v })),
-        ...tiers.map(v => ({ label: `Tier: ${v}`, column: 'customer_tier', value: v }))
-      ];
-    }
-
-    if (dataset === 'churn') {
-      const risks = auraEngine.getDistinctValues(tableName, 'churn_risk');
-      const plans = auraEngine.getDistinctValues(tableName, 'plan_tier');
-      return [
-        ...risks.map(v => ({ label: `Risk: ${v}`, column: 'churn_risk', value: v })),
-        ...plans.map(v => ({ label: `Plan: ${v}`, column: 'plan_tier', value: v }))
-      ];
-    }
-
-    if (dataset === 'webvitals') {
-      const devices = auraEngine.getDistinctValues(tableName, 'device_type');
-      const nets = auraEngine.getDistinctValues(tableName, 'network_type');
-      const ratings = auraEngine.getDistinctValues(tableName, 'vital_rating');
-      return [
-        ...devices.map(v => ({ label: `Device: ${v}`, column: 'device_type', value: v })),
-        ...ratings.map(v => ({ label: `Rating: ${v}`, column: 'vital_rating', value: v })),
-        ...nets.map(v => ({ label: `Network: ${v}`, column: 'network_type', value: v }))
-      ];
-    }
-
-    // Custom tables: use first string column for filtering
-    const rows = auraEngine.getTableData(tableName);
+    if (!dataset) return [];
+    const rows = auraEngine.getTableData(dataset);
     if (rows.length === 0) return [];
-    const stringCols = Object.keys(rows[0]).filter(k => typeof rows[0][k] === 'string');
-    if (stringCols.length === 0) return [];
-    const col = stringCols[0];
-    const vals = auraEngine.getDistinctValues(tableName, col, 8);
-    return vals.map(v => ({ label: `${col}: ${v}`, column: col, value: v }));
+
+    const firstRow = rows[0];
+    const stringCols = Object.keys(firstRow).filter(
+      (k) => typeof firstRow[k] === 'string' && !k.toLowerCase().includes('id') && !k.toLowerCase().includes('date')
+    );
+
+    const result: FilterOption[] = [];
+    for (const col of stringCols.slice(0, 3)) {
+      const distinctVals = auraEngine.getDistinctValues(dataset, col, 4);
+      for (const val of distinctVals) {
+        result.push({
+          label: `${col}: ${val}`,
+          column: col,
+          value: val
+        });
+      }
+    }
+    return result.slice(0, 8);
   }, [dataset]);
 
   if (options.length === 0) return null;
