@@ -1,5 +1,5 @@
 import { WebMcpToolEvent, WebMcpToolRegistration, ChartConfig, QueryResult } from '../types';
-import { db } from './duckdb';
+import { auraEngine } from './auraql';
 import { DATASETS_METADATA } from './datasets';
 
 type WebMcpEventListener = (event: WebMcpToolEvent) => void;
@@ -14,6 +14,7 @@ class WebMcpManager {
   private stateListeners: Set<StateUpdateListener> = new Set();
   private eventHistory: WebMcpToolEvent[] = [];
   public isNativeSupported: boolean = false;
+  private registeredTools: WebMcpToolRegistration[] = [];
 
   constructor() {
     this.detectCapabilities();
@@ -52,7 +53,7 @@ class WebMcpManager {
       try {
         fn(fullEvent);
       } catch (e) {
-        console.error('Error notifying event listener:', e);
+        console.error('Error in WebMCP event listener:', e);
       }
     });
   }
@@ -62,16 +63,12 @@ class WebMcpManager {
       try {
         fn({ type, data });
       } catch (e) {
-        console.error('Error in state listener:', e);
+        console.error('Error in WebMCP state listener:', e);
       }
     });
   }
 
-  /**
-   * Registers all analytical tools to document.modelContext
-   */
   public registerAllTools() {
-    // Reset previous controller if re-registering
     this.abortController.abort();
     this.abortController = new AbortController();
 
@@ -79,7 +76,7 @@ class WebMcpManager {
       // Tool 1: List Datasets and Schema
       {
         name: 'list_tables_and_schema',
-        description: 'Returns available dataset tables, column definitions, data types, and row counts in the active in-memory database.',
+        description: 'Returns available dataset tables, column definitions, data types, and row counts in the active in-memory AuraQL engine.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -117,29 +114,29 @@ class WebMcpManager {
         }
       },
 
-      // Tool 2: Execute SQL Query in DuckDB-Wasm
+      // Tool 2: Execute SQL Query in AuraQL
       {
         name: 'execute_sql_query',
-        description: 'Executes an analytical SQL query against the in-memory DuckDB database and returns structured JSON rows.',
+        description: 'Executes an analytical SQL query against the in-memory AuraQL database and returns structured records in milliseconds.',
         inputSchema: {
           type: 'object',
           properties: {
             sql: {
               type: 'string',
-              description: 'Standard DuckDB SQL statement (e.g., SELECT category, SUM(revenue) FROM ecommerce_sales GROUP BY 1)'
+              description: 'Standard AuraQL SQL query (e.g., SELECT category, SUM(revenue) FROM ecommerce_sales GROUP BY 1)'
             }
           },
           required: ['sql']
         },
         execute: async ({ sql }: { sql: string }) => {
           const startTime = performance.now();
-          const result: QueryResult = await db.query(sql);
+          const result: QueryResult = await auraEngine.query(sql);
           const duration = Math.max(result.executionTimeMs, +(performance.now() - startTime).toFixed(1));
 
           this.recordEvent({
             toolName: 'execute_sql_query',
             args: { sql },
-            resultSummary: result.error ? `Error: ${result.error}` : `Returned ${result.rowCount} rows in ${duration}ms`,
+            resultSummary: result.error ? `Error: ${result.error}` : `Returned ${result.rowCount} live rows in ${duration}ms`,
             durationMs: duration,
             status: result.error ? 'error' : 'success'
           });
@@ -149,7 +146,7 @@ class WebMcpManager {
           if (result.error) {
             return {
               isError: true,
-              content: [{ type: 'text', text: `SQL Execution Failed: ${result.error}` }]
+              content: [{ type: 'text', text: `SQL Evaluation Failed: ${result.error}` }]
             };
           }
 
@@ -160,7 +157,7 @@ class WebMcpManager {
                 rowCount: result.rowCount,
                 executionTimeMs: result.executionTimeMs,
                 columns: result.columns,
-                sampleRows: result.rows.slice(0, 50)
+                rows: result.rows.slice(0, 50)
               }, null, 2)
             }]
           };
@@ -170,14 +167,14 @@ class WebMcpManager {
       // Tool 3: Render Interactive Chart
       {
         name: 'render_interactive_chart',
-        description: 'Updates the live dashboard visual canvas with a dynamic chart (bar, line, area, donut, or scatter).',
+        description: 'Directly commands the live browser viewport to render or update a visualization (bar, line, area, donut, or scatter).',
         inputSchema: {
           type: 'object',
           properties: {
             type: {
               type: 'string',
               enum: ['bar', 'line', 'area', 'donut', 'scatter'],
-              description: 'Chart representation format'
+              description: 'Visualization format'
             },
             title: {
               type: 'string',
@@ -185,16 +182,16 @@ class WebMcpManager {
             },
             xAxis: {
               type: 'string',
-              description: 'Column to map to the X horizontal category axis'
+              description: 'Column to map to the X category axis'
             },
             yAxis: {
               type: 'string',
-              description: 'Column to map to the Y vertical numerical metric axis'
+              description: 'Column to map to the Y metric axis'
             },
             colorTheme: {
               type: 'string',
               enum: ['purple', 'cyan', 'emerald', 'gradient'],
-              description: 'Visual color accent palette'
+              description: 'Color styling'
             }
           },
           required: ['type', 'title', 'xAxis', 'yAxis']
@@ -202,7 +199,7 @@ class WebMcpManager {
         execute: async (config: ChartConfig) => {
           const startTime = performance.now();
           this.emitStateUpdate('chart', config);
-          const duration = Math.max(2.4, +(performance.now() - startTime).toFixed(1));
+          const duration = Math.max(2.2, +(performance.now() - startTime).toFixed(1));
 
           this.recordEvent({
             toolName: 'render_interactive_chart',
@@ -215,7 +212,7 @@ class WebMcpManager {
           return {
             content: [{
               type: 'text',
-              text: `Successfully rendered ${config.type} chart: "${config.title}". Canvas updated in user viewport.`
+              text: `Rendered ${config.type} chart: "${config.title}". Viewport updated live on screen.`
             }]
           };
         }
@@ -224,7 +221,7 @@ class WebMcpManager {
       // Tool 4: Apply Dashboard Filter Slice
       {
         name: 'apply_dashboard_filter',
-        description: 'Filters the active analytics view to isolate a specific cohort, region, plan, or metric band.',
+        description: 'Filters the active analytics view to isolate a specific cohort, region, or segment.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -250,14 +247,14 @@ class WebMcpManager {
           return {
             content: [{
               type: 'text',
-              text: `Active filter set: ${filter.column} ${filter.operator || '='} ${filter.value}. Dashboard metrics refreshed.`
+              text: `Dashboard filter set: ${filter.column} ${filter.operator || '='} ${filter.value}.`
             }]
           };
         }
       }
     ];
 
-    // Attempt registration with native browser document.modelContext if supported
+    // Attempt native registration if document.modelContext exists
     const doc = typeof document !== 'undefined' ? (document as any) : null;
     const modelContext = doc?.modelContext || (typeof navigator !== 'undefined' ? (navigator as any).modelContext : null);
 
@@ -277,22 +274,13 @@ class WebMcpManager {
         this.isNativeSupported = true;
         console.log('⚡ [WebMCP] Successfully registered tools with document.modelContext');
       } catch (err) {
-        console.warn('⚡ [WebMCP] Native tool registration warning:', err);
+        console.warn('⚡ [WebMCP] Native tool registration:', err);
       }
-    } else {
-      console.log('⚡ [WebMCP] Browser native document.modelContext not detected. Ready in agent simulation and testing mode.');
     }
 
-    // Store tools for in-app simulator
     this.registeredTools = tools;
   }
 
-  private registeredTools: WebMcpToolRegistration[] = [];
-
-  /**
-   * Allows simulated execution from the UI inspector so judges without Chrome flags
-   * can test the exact tool calls interactively.
-   */
   public async executeSimulatedTool(name: string, args: Record<string, any>) {
     const tool = this.registeredTools.find(t => t.name === name);
     if (!tool) throw new Error(`Tool ${name} not found`);

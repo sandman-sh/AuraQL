@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Terminal, Play, Zap, Copy, Check, Clock, Sparkles } from 'lucide-react';
+import { Terminal, Play, Zap, Copy, Check } from 'lucide-react';
 import { DATASETS_METADATA } from '../../engine/datasets';
 import { DatasetId } from '../../types';
 
@@ -43,65 +43,64 @@ export const SqlConsole: React.FC<SqlConsoleProps> = ({
   };
 
   return (
-    <div className={`glass-card rounded-2xl p-5 border transition-all duration-300 ${
-      isAgentExecuting ? 'border-brand-500 ring-2 ring-brand-500/30' : 'border-white/[0.08]'
+    <div className={`glass-card rounded-none p-4 border transition-all duration-200 ${
+      isAgentExecuting ? 'border-brand-500 ring-1 ring-brand-500/40 glow-purple-sm' : 'border-white/[0.08]'
     }`}>
       {/* Console Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-2.5">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-md bg-brand-950 flex items-center justify-center border border-brand-500/30 text-brand-400">
-            <Terminal className="w-3.5 h-3.5" />
+          <div className="w-5 h-5 rounded-none bg-brand-950 flex items-center justify-center border border-brand-500/40 text-brand-400">
+            <Terminal className="w-3 h-3" />
           </div>
           <span className="text-xs font-bold font-mono text-white tracking-wide">
-            AuraQL Console
+            AuraQL Editor
           </span>
-          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-dark-900 text-slate-400 border border-white/10">
+          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-none bg-dark-900 text-slate-400 border border-white/10">
             {meta?.tableName}
           </span>
         </div>
 
-        {/* Execution Speed Telemetry Badge */}
+        {/* Execution Telemetry */}
         <div className="flex items-center gap-2">
           {rowCount > 0 && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/60 border border-emerald-500/30 text-emerald-300 text-[11px] font-mono">
+            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-none bg-emerald-950/60 border border-emerald-500/30 text-emerald-300 text-[10px] font-mono">
               <Zap className="w-3 h-3 text-emerald-400" />
-              <span>⚡ {executionTimeMs}ms</span>
+              <span>⚡ {executionTimeMs}ms (AuraQL Core)</span>
               <span className="text-emerald-500">•</span>
-              <span>{rowCount} rows</span>
+              <span>{rowCount} live rows</span>
             </div>
           )}
 
           <button
             onClick={handleCopy}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-dark-800 transition-colors"
-            title="Copy SQL"
+            className="p-1 rounded-none text-slate-400 hover:text-white hover:bg-dark-800 transition-colors"
+            title="Copy Query"
           >
             {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
           </button>
         </div>
       </div>
 
-      {/* SQL Textarea Editor */}
-      <div className="relative mb-3">
+      {/* SQL Textarea */}
+      <div className="relative mb-2.5">
         <textarea
           value={editorSql}
           onChange={(e) => setEditorSql(e.target.value)}
           onKeyDown={handleKeyDown}
-          rows={3}
+          rows={2}
           spellCheck={false}
-          className="w-full bg-dark-950/90 rounded-xl p-3.5 text-xs sm:text-sm font-mono text-brand-300 border border-white/10 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none resize-y transition-all leading-relaxed"
-          placeholder="Enter DuckDB SQL query... (e.g., SELECT * FROM ecommerce_sales LIMIT 10;)"
+          className="w-full bg-dark-950 rounded-none p-3 text-xs font-mono text-brand-300 border border-white/10 focus:border-brand-500 focus:ring-0 outline-none resize-y transition-all leading-relaxed"
+          placeholder="Type AuraQL query... (e.g., SELECT * FROM ecommerce_sales LIMIT 20;)"
         />
-
-        <div className="absolute right-3 bottom-3 text-[10px] font-mono text-slate-500 pointer-events-none hidden sm:block">
-          Press ⌘+Enter / Ctrl+Enter to execute
+        <div className="absolute right-2.5 bottom-2.5 text-[9px] font-mono text-slate-500 pointer-events-none hidden sm:block">
+          Ctrl+Enter to run
         </div>
       </div>
 
-      {/* Quick Templates & Run Button */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-1.5 overflow-x-auto py-1 max-w-full">
-          <span className="text-[10px] font-mono text-slate-500 uppercase shrink-0">Snippets:</span>
+      {/* Snippets & Execute Button */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5">
+        <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 max-w-full">
+          <span className="text-[10px] font-mono text-slate-500 uppercase shrink-0">Templates:</span>
           {meta?.sampleQueries.map((q, idx) => (
             <button
               key={idx}
@@ -109,7 +108,7 @@ export const SqlConsole: React.FC<SqlConsoleProps> = ({
                 setEditorSql(q.sql);
                 onRunSql(q.sql);
               }}
-              className="px-2.5 py-1 rounded-md text-[11px] font-mono bg-dark-900/80 hover:bg-brand-950 hover:text-brand-300 text-slate-300 border border-white/[0.06] hover:border-brand-500/30 transition-all shrink-0"
+              className="px-2 py-1 rounded-none text-[10px] font-mono bg-dark-900 hover:bg-brand-950 hover:text-brand-300 text-slate-300 border border-white/[0.08] hover:border-brand-500/40 transition-all shrink-0"
             >
               {q.title}
             </button>
@@ -118,10 +117,10 @@ export const SqlConsole: React.FC<SqlConsoleProps> = ({
 
         <button
           onClick={() => onRunSql(editorSql)}
-          className="px-4 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-medium text-xs font-mono flex items-center gap-1.5 shadow-md shadow-brand-600/30 transition-all hover:scale-[1.02] active:scale-[0.98] shrink-0"
+          className="px-4 py-1.5 rounded-none bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs font-mono flex items-center gap-1.5 shadow-md shadow-brand-600/30 transition-all active:scale-[0.98] shrink-0 border border-brand-400/40"
         >
           <Play className="w-3.5 h-3.5" />
-          <span>Execute Query</span>
+          <span>Execute AuraQL</span>
         </button>
       </div>
     </div>

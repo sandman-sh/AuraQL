@@ -1,5 +1,5 @@
 # Aura Analytics (AuraQL) 🔮
-### Zero-Server In-Browser OLAP Intelligence Powered by WebMCP & DuckDB-Wasm
+### Zero-Server In-Browser OLAP Intelligence Powered by WebMCP & AuraQL
 
 > **Built for The WebMCP Challenge 2026**  
 > *Hosted by OpenAI, Google Chrome, Vercel, Cloudflare, Netlify, Render, and Shopify.*
@@ -10,9 +10,9 @@
 
 **Aura Analytics** is a zero-server, privacy-first business intelligence and data analytics studio designed specifically for the **WebMCP open standard** (`document.modelContext`).
 
-Instead of sending confidential financial spreadsheets, logs, or customer databases to remote cloud warehouses, **Aura Analytics compiles DuckDB into WebAssembly directly inside the user's browser tab**. 
+Instead of sending confidential financial spreadsheets, logs, or customer databases to remote cloud warehouses, **Aura Analytics runs the AuraQL in-memory columnar engine directly inside the user's browser tab**. 
 
-When accessed through **ChatGPT's in-app browser** or **Google Chrome with WebMCP enabled**, ChatGPT automatically discovers structured site tools. It can inspect dataset schemas, execute complex analytical SQL aggregations in under **10 milliseconds**, and dynamically command live charts on the user's screen—with **zero raw data ever leaving the device**.
+When accessed through **ChatGPT's in-app browser** or **Google Chrome with WebMCP enabled**, ChatGPT automatically discovers structured site tools. It can inspect dataset schemas, execute complex analytical SQL aggregations in under **10 milliseconds**, and dynamically command live visual charts on the user's screen—with **zero raw data ever leaving the device**.
 
 ---
 
@@ -23,7 +23,7 @@ When accessed through **ChatGPT's in-app browser** or **Google Chrome with WebMC
 2. **Beyond Brittle DOM Scraping**:  
    Traditional web agents struggle with complex data dashboards because canvas elements and SVG charts cannot be easily scraped. With WebMCP, ChatGPT commands the analytical engine natively via JSON schemas.
 3. **Mathematical Accuracy & No LLM Hallucinations**:  
-   LLMs are prone to arithmetic errors when computing sums, averages, or variances on large datasets. With Aura Analytics, ChatGPT writes the SQL query, and DuckDB executes it deterministically on the columnar data in client memory.
+   LLMs are prone to arithmetic errors when computing sums, averages, or variances on large datasets. With Aura Analytics, ChatGPT writes the SQL query, and AuraQL executes it deterministically on the columnar data in client memory.
 4. **Zero-Server Overhead & Complete Privacy**:  
    The entire application runs client-side. There are no backend database servers, no API tokens to leak, and zero hosting costs.
 
@@ -31,29 +31,29 @@ When accessed through **ChatGPT's in-app browser** or **Google Chrome with WebMC
 
 ## 🛠️ How WebMCP Was Implemented
 
-Aura Analytics implements the official W3C WebMCP imperative specification using `document.modelContext.registerTool(...)` with lifecycle management:
+Aura Analytics implements the official W3C WebMCP imperative specification using `document.modelContext.registerTool(...)` with dynamic lifecycle management:
 
 ```typescript
 // Registering tools directly into document.modelContext
 if ('modelContext' in document) {
   const controller = new AbortController();
 
-  // 1. Tool to execute SQL queries in DuckDB-Wasm
+  // 1. Tool to execute SQL queries in AuraQL
   document.modelContext.registerTool({
     name: "execute_sql_query",
-    description: "Executes an analytical SQL query against the in-memory DuckDB database and returns structured records.",
+    description: "Executes an analytical SQL query against the in-memory AuraQL database and returns structured records.",
     inputSchema: {
       type: "object",
       properties: {
         sql: {
           type: "string",
-          description: "Standard DuckDB SQL statement (e.g., SELECT category, SUM(revenue) FROM ecommerce_sales GROUP BY 1)"
+          description: "Standard AuraQL statement (e.g., SELECT category, SUM(revenue) FROM ecommerce_sales GROUP BY 1)"
         }
       },
       required: ["sql"]
     },
     execute: async ({ sql }) => {
-      const result = await duckdb.query(sql);
+      const result = await auraEngine.query(sql);
       return {
         content: [{ type: "text", text: JSON.stringify(result.rows) }]
       };
@@ -142,7 +142,7 @@ If testing in a standard browser without flags, open the **WebMCP Bridge** drawe
 
 ## 🏆 Submission Checklist
 
-- [x] Working live application with client-side DuckDB-Wasm engine
+- [x] Working live application with client-side AuraQL columnar engine
 - [x] Full `document.modelContext.registerTool` implementation
 - [x] 100% private zero-server execution
 - [x] Dynamic multi-type charting (Bar, Area/Line, Donut)

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BarChart3, LineChart, PieChart, Sparkles, Maximize2, Download, RefreshCw } from 'lucide-react';
+import { BarChart3, LineChart, PieChart, Sparkles, RefreshCw } from 'lucide-react';
 import { ChartConfig, ChartType } from '../../types';
 
 interface ChartViewportProps {
@@ -17,66 +17,63 @@ export const ChartViewport: React.FC<ChartViewportProps> = ({
 }) => {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
-  // Extract keys
   const xKey = config.xAxis;
   const yKey = config.yAxis;
 
-  // Aggregate or take top 10 items for visual clarity
-  const chartItems = data.slice(0, 10).map((row) => ({
+  // Filter and map real data
+  const chartItems = (data || []).slice(0, 10).map((row) => ({
     label: String(row[xKey] ?? 'Unknown'),
     value: Number(row[yKey] ?? 0)
   }));
 
   const maxValue = Math.max(...chartItems.map((d) => d.value), 1);
-
-  // Palette colors
   const purplePalette = ['#C084FC', '#A855F7', '#9333EA', '#7E22CE', '#6B21A8', '#581C87', '#3B0764', '#818CF8', '#00F0FF', '#10B981'];
 
   return (
-    <div className={`glass-card rounded-2xl p-6 border transition-all duration-500 relative ${
-      isAgentUpdated ? 'border-brand-500 ring-2 ring-brand-500/40 glow-purple-md' : 'border-white/[0.08]'
+    <div className={`glass-card rounded-none p-5 border transition-all duration-300 relative ${
+      isAgentUpdated ? 'border-brand-500 ring-1 ring-brand-500/50 glow-purple-md' : 'border-white/[0.08]'
     }`}>
-      {/* Agent Commanded Glow Banner */}
+      {/* Agent Commanded Banner */}
       {isAgentUpdated && (
-        <div className="absolute -top-3 left-6 px-3 py-0.5 rounded-full bg-brand-600 text-white text-[11px] font-mono font-semibold flex items-center gap-1.5 shadow-lg shadow-brand-600/40 animate-pulse">
+        <div className="absolute -top-3 left-4 px-2.5 py-0.5 rounded-none bg-brand-600 text-white text-[10px] font-mono font-bold flex items-center gap-1.5 shadow-md shadow-brand-600/50 border border-brand-300/40">
           <Sparkles className="w-3 h-3 text-amber-300" />
-          <span>WebMCP Commanded: Live Render</span>
+          <span>WEBMCP COMMAND: ACTIVE VIEWPORT UPDATE</span>
         </div>
       )}
 
-      {/* Viewport Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+      {/* Header Controls */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
           <div className="flex items-center gap-2">
-            <h3 className="text-lg font-bold text-white tracking-tight">{config.title}</h3>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-brand-950 text-brand-300 border border-brand-500/30">
+            <h3 className="text-base font-bold text-white font-mono tracking-tight">{config.title}</h3>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-none bg-brand-950 text-brand-300 border border-brand-500/30">
               {config.type.toUpperCase()}
             </span>
           </div>
-          <p className="text-xs text-slate-400 mt-0.5 font-mono">
-            Axis: X [{xKey}] &nbsp;•&nbsp; Y [{yKey}] &nbsp;•&nbsp; {chartItems.length} categories plotted
+          <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+            X-Axis: [{xKey}] &nbsp;•&nbsp; Y-Axis: [{yKey}] &nbsp;•&nbsp; {chartItems.length} active data points
           </p>
         </div>
 
-        {/* Chart Type Selector */}
-        <div className="flex items-center gap-1 bg-dark-950/80 p-1 rounded-xl border border-white/[0.08]">
+        {/* Sharp Chart Type Toggles */}
+        <div className="flex items-center bg-dark-950 border border-white/[0.08] p-0.5 rounded-none">
           <button
             onClick={() => onTypeChange('bar')}
-            className={`p-1.5 rounded-lg text-xs transition-colors ${config.type === 'bar' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white'}`}
-            title="Bar Chart"
+            className={`p-1.5 rounded-none text-xs transition-colors ${config.type === 'bar' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            title="Bar Visualization"
           >
             <BarChart3 className="w-4 h-4" />
           </button>
           <button
             onClick={() => onTypeChange('area')}
-            className={`p-1.5 rounded-lg text-xs transition-colors ${config.type === 'area' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white'}`}
-            title="Area / Line Chart"
+            className={`p-1.5 rounded-none text-xs transition-colors ${config.type === 'area' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            title="Area / Line Visualization"
           >
             <LineChart className="w-4 h-4" />
           </button>
           <button
             onClick={() => onTypeChange('donut')}
-            className={`p-1.5 rounded-lg text-xs transition-colors ${config.type === 'donut' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            className={`p-1.5 rounded-none text-xs transition-colors ${config.type === 'donut' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white'}`}
             title="Donut Distribution"
           >
             <PieChart className="w-4 h-4" />
@@ -85,15 +82,15 @@ export const ChartViewport: React.FC<ChartViewportProps> = ({
       </div>
 
       {/* Chart Canvas Area */}
-      <div className="h-[280px] w-full flex items-end justify-center relative pt-4 pb-8">
+      <div className="h-[240px] w-full flex items-end justify-center relative pt-2 pb-6">
         {chartItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center text-slate-500 font-mono text-xs">
-            <RefreshCw className="w-6 h-6 animate-spin mb-2 text-brand-500" />
-            <span>Awaiting query data stream...</span>
+            <RefreshCw className="w-5 h-5 animate-spin mb-2 text-brand-500" />
+            <span>AuraQL query stream pending...</span>
           </div>
         ) : config.type === 'bar' ? (
-          // Bar Chart Rendering
-          <div className="w-full h-full flex items-end justify-between gap-3 px-2">
+          // Sharp Bar Chart
+          <div className="w-full h-full flex items-end justify-between gap-2.5 px-2">
             {chartItems.map((item, idx) => {
               const heightPct = Math.max(8, (item.value / maxValue) * 100);
               const isHovered = hoveredIndex === idx;
@@ -106,24 +103,23 @@ export const ChartViewport: React.FC<ChartViewportProps> = ({
                 >
                   {/* Tooltip */}
                   {isHovered && (
-                    <div className="absolute -top-12 z-20 px-2.5 py-1 rounded-lg bg-dark-950 border border-brand-500/50 text-[11px] font-mono text-white shadow-xl whitespace-nowrap">
+                    <div className="absolute -top-11 z-20 px-2 py-0.5 rounded-none bg-dark-950 border border-brand-500 text-[10px] font-mono text-white shadow-xl whitespace-nowrap">
                       <span className="text-brand-300 font-bold">{item.label}</span>: {item.value.toLocaleString()}
                     </div>
                   )}
 
-                  {/* Bar element */}
+                  {/* Sharp Bar element */}
                   <div
                     style={{ height: `${heightPct}%` }}
-                    className={`w-full rounded-t-lg transition-all duration-300 relative overflow-hidden ${
+                    className={`w-full rounded-none transition-all duration-200 border-t border-brand-300/40 relative ${
                       isHovered
                         ? 'bg-gradient-to-t from-brand-700 via-brand-500 to-purple-300 shadow-lg shadow-brand-500/50'
-                        : 'bg-gradient-to-t from-purple-900/80 via-brand-600 to-brand-400'
+                        : 'bg-gradient-to-t from-purple-950 via-brand-700 to-brand-500'
                     }`}
                   >
                     <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
 
-                  {/* Label */}
                   <span className="text-[10px] font-mono text-slate-400 mt-2 truncate w-full text-center">
                     {item.label}
                   </span>
@@ -132,58 +128,56 @@ export const ChartViewport: React.FC<ChartViewportProps> = ({
             })}
           </div>
         ) : config.type === 'area' ? (
-          // Area & Line Chart Rendering
+          // Sharp Area Chart
           <div className="w-full h-full relative flex flex-col justify-end">
-            <svg viewBox="0 0 500 150" preserveAspectRatio="none" className="w-full h-[220px] overflow-visible">
+            <svg viewBox="0 0 500 130" preserveAspectRatio="none" className="w-full h-[190px] overflow-visible">
               <defs>
-                <linearGradient id="areaGlow" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stopColor="#A855F7" stopOpacity="0.45" />
+                <linearGradient id="areaGlowSharp" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stopColor="#A855F7" stopOpacity="0.5" />
                   <stop offset="100%" stopColor="#A855F7" stopOpacity="0.0" />
                 </linearGradient>
               </defs>
 
-              {/* Area fill */}
               <polygon
-                points={`0,150 ${chartItems
+                points={`0,130 ${chartItems
                   .map((item, i) => {
                     const x = (i / (chartItems.length - 1 || 1)) * 500;
-                    const y = 150 - (item.value / maxValue) * 130;
+                    const y = 130 - (item.value / maxValue) * 110;
                     return `${x},${y}`;
                   })
-                  .join(' ')} 500,150`}
-                fill="url(#areaGlow)"
+                  .join(' ')} 500,130`}
+                fill="url(#areaGlowSharp)"
               />
 
-              {/* Polyline stroke */}
               <polyline
                 fill="none"
                 stroke="#C084FC"
-                strokeWidth="3"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+                strokeWidth="2.5"
+                strokeLinecap="square"
+                strokeLinejoin="miter"
                 points={chartItems
                   .map((item, i) => {
                     const x = (i / (chartItems.length - 1 || 1)) * 500;
-                    const y = 150 - (item.value / maxValue) * 130;
+                    const y = 130 - (item.value / maxValue) * 110;
                     return `${x},${y}`;
                   })
                   .join(' ')}
               />
 
-              {/* Coordinates dots */}
               {chartItems.map((item, i) => {
                 const x = (i / (chartItems.length - 1 || 1)) * 500;
-                const y = 150 - (item.value / maxValue) * 130;
+                const y = 130 - (item.value / maxValue) * 110;
                 return (
-                  <circle
+                  <rect
                     key={i}
-                    cx={x}
-                    cy={y}
-                    r={hoveredIndex === i ? 6 : 4}
-                    fill="#F8FAFC"
+                    x={x - 3}
+                    y={y - 3}
+                    width={6}
+                    height={6}
+                    fill={hoveredIndex === i ? '#FFFFFF' : '#00F0FF'}
                     stroke="#9333EA"
-                    strokeWidth="2.5"
-                    className="cursor-pointer transition-all"
+                    strokeWidth="1.5"
+                    className="cursor-pointer"
                     onMouseEnter={() => setHoveredIndex(i)}
                     onMouseLeave={() => setHoveredIndex(null)}
                   />
@@ -191,19 +185,18 @@ export const ChartViewport: React.FC<ChartViewportProps> = ({
               })}
             </svg>
 
-            {/* Labels below */}
             <div className="flex justify-between w-full mt-2 text-[10px] font-mono text-slate-400">
               {chartItems.map((item, idx) => (
-                <span key={idx} className="truncate max-w-[50px] text-center">
+                <span key={idx} className="truncate max-w-[55px] text-center">
                   {item.label}
                 </span>
               ))}
             </div>
           </div>
         ) : (
-          // Donut Chart Rendering
+          // Donut Distribution
           <div className="w-full h-full flex items-center justify-center gap-8">
-            <div className="relative w-44 h-44">
+            <div className="relative w-40 h-40">
               <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
                 {(() => {
                   let accumulatedPercent = 0;
@@ -221,7 +214,7 @@ export const ChartViewport: React.FC<ChartViewportProps> = ({
                         r="38"
                         fill="transparent"
                         stroke={purplePalette[i % purplePalette.length]}
-                        strokeWidth="14"
+                        strokeWidth="15"
                         strokeDasharray={strokeDasharray}
                         strokeDashoffset={strokeDashoffset}
                         className="transition-all hover:stroke-white cursor-pointer"
@@ -233,20 +226,19 @@ export const ChartViewport: React.FC<ChartViewportProps> = ({
                   });
                 })()}
               </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span className="text-[10px] font-mono text-slate-400 uppercase">Total</span>
-                <span className="text-sm font-bold text-white font-mono">
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none font-mono">
+                <span className="text-[9px] text-slate-400 uppercase">Sum</span>
+                <span className="text-xs font-bold text-white">
                   {chartItems.reduce((acc, curr) => acc + curr.value, 0).toLocaleString()}
                 </span>
               </div>
             </div>
 
-            {/* Legend */}
-            <div className="flex flex-col gap-1.5 max-h-[200px] overflow-y-auto pr-2">
+            <div className="flex flex-col gap-1.5 max-h-[190px] overflow-y-auto pr-2">
               {chartItems.slice(0, 6).map((item, i) => (
                 <div key={i} className="flex items-center gap-2 text-xs font-mono">
-                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: purplePalette[i % purplePalette.length] }} />
-                  <span className="text-slate-300 truncate max-w-[100px]">{item.label}</span>
+                  <span className="w-2 h-2 shrink-0 rounded-none" style={{ backgroundColor: purplePalette[i % purplePalette.length] }} />
+                  <span className="text-slate-300 truncate max-w-[110px]">{item.label}</span>
                   <span className="text-slate-500 font-bold ml-auto">{item.value.toLocaleString()}</span>
                 </div>
               ))}

@@ -7,7 +7,7 @@ import { DataTable } from './DataTable';
 import { WebMcpInspector } from './WebMcpInspector';
 import { UploadModal } from '../modals/UploadModal';
 import { DatasetId, ChartConfig, QueryResult, WebMcpToolEvent, ChartType } from '../../types';
-import { db } from '../../engine/duckdb';
+import { auraEngine } from '../../engine/auraql';
 import { webMcp } from '../../engine/webmcp';
 import { DATASETS_METADATA } from '../../engine/datasets';
 
@@ -23,11 +23,10 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
   const [agentUpdated, setAgentUpdated] = useState<boolean>(false);
 
   // Active Query State
-  const [currentSql, setCurrentSql] = useState<string>(
-    DATASETS_METADATA.ecommerce.sampleQueries[0].sql
-  );
+  const defaultSql = DATASETS_METADATA.ecommerce.sampleQueries[0].sql;
+  const [currentSql, setCurrentSql] = useState<string>(defaultSql);
   const [queryResult, setQueryResult] = useState<QueryResult>({
-    sql: DATASETS_METADATA.ecommerce.sampleQueries[0].sql,
+    sql: defaultSql,
     columns: [],
     rows: [],
     rowCount: 0,
@@ -38,24 +37,20 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
   // Active Chart Configuration
   const [chartConfig, setChartConfig] = useState<ChartConfig>({
     type: 'bar',
-    title: 'Revenue & Gross Margin by Product Category',
+    title: 'Revenue & Margin by Product Category',
     xAxis: 'product_category',
     yAxis: 'total_rev',
     colorTheme: 'purple'
   });
 
-  // Initialize DB and Run Default Query
+  // Initialize WebMCP tools and run default query
   useEffect(() => {
-    // 1. Initialize DuckDB & Register WebMCP tools
-    db.initialize();
     webMcp.registerAllTools();
 
-    // 2. Subscribe to WebMCP live events
     const unsubEvents = webMcp.subscribeEvents((newEvt) => {
       setEvents((prev) => [newEvt, ...prev.slice(0, 40)]);
     });
 
-    // 3. Subscribe to WebMCP State updates (when ChatGPT triggers tools)
     const unsubState = webMcp.subscribeStateUpdates(({ type, data }) => {
       if (type === 'query') {
         const res = data as QueryResult;
@@ -71,8 +66,8 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
       }
     });
 
-    // Run initial query
-    handleRunQuery(DATASETS_METADATA[activeDataset].sampleQueries[0].sql);
+    // Run initial query with live calculations
+    handleRunQuery(defaultSql);
 
     return () => {
       unsubEvents();
@@ -80,16 +75,14 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
     };
   }, []);
 
-  // Handle Dataset Switch
   const handleSelectDataset = (id: DatasetId) => {
     setActiveDataset(id);
     const meta = DATASETS_METADATA[id];
     if (meta && meta.sampleQueries.length > 0) {
-      const defaultSql = meta.sampleQueries[0].sql;
-      setCurrentSql(defaultSql);
-      handleRunQuery(defaultSql);
+      const sql = meta.sampleQueries[0].sql;
+      setCurrentSql(sql);
+      handleRunQuery(sql);
 
-      // Set tailored default charts
       if (id === 'ecommerce') {
         setChartConfig({
           type: 'bar',
@@ -118,13 +111,11 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
     }
   };
 
-  // Run SQL Query Handler
   const handleRunQuery = async (sql: string) => {
     setCurrentSql(sql);
-    const res = await db.query(sql);
+    const res = await auraEngine.query(sql);
     setQueryResult(res);
 
-    // If query returns results and columns, adapt chart axes if not already matching
     if (res.rows.length > 0 && res.columns.length >= 2) {
       const firstCol = res.columns[0];
       const secondCol = res.columns[1];
@@ -141,15 +132,17 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
   };
 
   const handleCustomDatasetImported = (tableName: string, count: number) => {
+    setActiveDataset(tableName as any);
     const customSql = `SELECT * FROM ${tableName} LIMIT 50;`;
     setCurrentSql(customSql);
     handleRunQuery(customSql);
   };
 
   const currentMeta = DATASETS_METADATA[activeDataset];
+  const activeTableName = currentMeta?.tableName || String(activeDataset);
 
   return (
-    <div className="min-h-screen bg-dark-950 text-slate-100 flex flex-col selection:bg-brand-500/30 selection:text-brand-300">
+    <div className="h-screen w-screen bg-dark-950 text-slate-100 flex flex-col overflow-hidden selection:bg-brand-500/30 selection:text-brand-300">
       {/* Studio Header */}
       <Header
         activeDataset={activeDataset}
@@ -162,14 +155,14 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
         recentToolCallCount={events.length}
       />
 
-      {/* Main Workspace Layout with Telemetry Inspector */}
+      {/* Main Studio Viewport (Fixed Layout) */}
       <div className="flex-1 flex overflow-hidden relative">
-        {/* Main Analytics Canvas Area */}
-        <main className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Top KPI Metric Cards */}
-          <MetricCards dataset={activeDataset} />
+        {/* Main Analytics Scrollable Area */}
+        <main className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+          {/* Dynamic Live Metric Cards computed from real data */}
+          <MetricCards tableName={activeTableName} />
 
-          {/* Interactive Chart Viewport */}
+          {/* Interactive Chart Canvas Viewport */}
           <ChartViewport
             config={chartConfig}
             data={queryResult.rows}
@@ -177,7 +170,7 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
             isAgentUpdated={agentUpdated}
           />
 
-          {/* AuraQL SQL Query Console */}
+          {/* AuraQL Code & Execution Console */}
           <SqlConsole
             activeDataset={activeDataset}
             currentSql={currentSql}
@@ -187,11 +180,11 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
             isAgentExecuting={agentUpdated}
           />
 
-          {/* Data Table Grid */}
+          {/* Real Tabular Stream */}
           <DataTable
             columns={queryResult.columns}
             rows={queryResult.rows}
-            tableName={currentMeta?.tableName || 'dataset_query'}
+            tableName={activeTableName}
           />
         </main>
 

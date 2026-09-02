@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Activity, Zap, Play, CheckCircle2, AlertCircle, Bot, X, ChevronRight, Code2, Sparkles } from 'lucide-react';
+import { Activity, Zap, Play, Bot, X, Sparkles } from 'lucide-react';
 import { WebMcpToolEvent, DatasetId } from '../../types';
 import { webMcp } from '../../engine/webmcp';
 
@@ -21,19 +21,16 @@ export const WebMcpInspector: React.FC<WebMcpInspectorProps> = ({
 
   if (!isOpen) return null;
 
-  // Pre-configured agent simulation scenarios
   const handleSimulateScenario = async (scenario: 'top_rev' | 'critical_churn' | 'vitals_mobile') => {
     setSimulating(true);
     try {
       if (scenario === 'top_rev') {
-        // 1. Run query
         await webMcp.executeSimulatedTool('execute_sql_query', {
           sql: 'SELECT product_category, ROUND(SUM(revenue), 2) as total_rev FROM ecommerce_sales GROUP BY product_category ORDER BY total_rev DESC;'
         });
-        // 2. Render chart
         await webMcp.executeSimulatedTool('render_interactive_chart', {
           type: 'bar',
-          title: 'Top Performing Product Categories by Net Revenue',
+          title: 'Top Performing Categories by Net Revenue',
           xAxis: 'product_category',
           yAxis: 'total_rev',
           colorTheme: 'purple'
@@ -44,7 +41,7 @@ export const WebMcpInspector: React.FC<WebMcpInspectorProps> = ({
         });
         await webMcp.executeSimulatedTool('render_interactive_chart', {
           type: 'area',
-          title: 'Critical Accounts ARR vs Health Distribution',
+          title: 'Critical Accounts ARR vs Health Index',
           xAxis: 'company_name',
           yAxis: 'monthly_mrr',
           colorTheme: 'gradient'
@@ -71,35 +68,35 @@ export const WebMcpInspector: React.FC<WebMcpInspectorProps> = ({
   return (
     <div className="w-full lg:w-96 glass-panel border-l border-white/[0.08] flex flex-col h-full z-20 shrink-0 bg-dark-950/95">
       {/* Inspector Header */}
-      <div className="p-4 border-b border-white/[0.08] flex items-center justify-between">
+      <div className="p-3.5 border-b border-white/[0.08] flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-brand-950 border border-brand-500/40 flex items-center justify-center text-brand-400">
-            <Bot className="w-4 h-4" />
+          <div className="w-6 h-6 rounded-none bg-brand-950 border border-brand-500/40 flex items-center justify-center text-brand-400">
+            <Bot className="w-3.5 h-3.5" />
           </div>
           <div>
             <h4 className="text-xs font-bold text-white font-mono tracking-tight flex items-center gap-1.5">
               <span>WebMCP Bridge</span>
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="w-1.5 h-1.5 rounded-none bg-emerald-400 animate-pulse" />
             </h4>
-            <span className="text-[10px] font-mono text-emerald-400">document.modelContext active</span>
+            <span className="text-[9px] font-mono text-emerald-400">document.modelContext active</span>
           </div>
         </div>
 
         <button
           onClick={onClose}
-          className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-dark-800"
+          className="p-1 rounded-none text-slate-400 hover:text-white hover:bg-dark-800"
         >
           <X className="w-4 h-4" />
         </button>
       </div>
 
-      {/* Navigation Tabs */}
+      {/* Sharp Tabs */}
       <div className="flex border-b border-white/[0.06] bg-dark-900/60 p-1 gap-1">
         <button
           onClick={() => setActiveTab('stream')}
-          className={`flex-1 py-1.5 text-[11px] font-mono rounded-lg transition-colors ${
+          className={`flex-1 py-1 text-[11px] font-mono rounded-none transition-colors ${
             activeTab === 'stream'
-              ? 'bg-brand-600 text-white font-semibold shadow-sm'
+              ? 'bg-brand-600 text-white font-bold border border-brand-400/40 shadow-sm'
               : 'text-slate-400 hover:text-white'
           }`}
         >
@@ -107,9 +104,9 @@ export const WebMcpInspector: React.FC<WebMcpInspectorProps> = ({
         </button>
         <button
           onClick={() => setActiveTab('simulate')}
-          className={`flex-1 py-1.5 text-[11px] font-mono rounded-lg transition-colors ${
+          className={`flex-1 py-1 text-[11px] font-mono rounded-none transition-colors ${
             activeTab === 'simulate'
-              ? 'bg-brand-600 text-white font-semibold shadow-sm'
+              ? 'bg-brand-600 text-white font-bold border border-brand-400/40 shadow-sm'
               : 'text-slate-400 hover:text-white'
           }`}
         >
@@ -117,9 +114,9 @@ export const WebMcpInspector: React.FC<WebMcpInspectorProps> = ({
         </button>
         <button
           onClick={() => setActiveTab('specs')}
-          className={`flex-1 py-1.5 text-[11px] font-mono rounded-lg transition-colors ${
+          className={`flex-1 py-1 text-[11px] font-mono rounded-none transition-colors ${
             activeTab === 'specs'
-              ? 'bg-brand-600 text-white font-semibold shadow-sm'
+              ? 'bg-brand-600 text-white font-bold border border-brand-400/40 shadow-sm'
               : 'text-slate-400 hover:text-white'
           }`}
         >
@@ -128,30 +125,30 @@ export const WebMcpInspector: React.FC<WebMcpInspectorProps> = ({
       </div>
 
       {/* Tab Contents */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 overflow-y-auto p-3.5 space-y-3">
         {activeTab === 'stream' && (
           <div>
             <div className="text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-2 flex items-center justify-between">
               <span>Tool Invocations Stream</span>
-              <span>Execution Time</span>
+              <span>Execution Duration</span>
             </div>
 
             {events.length === 0 ? (
-              <div className="text-center py-12 px-4 rounded-xl border border-dashed border-white/10 text-slate-500 font-mono text-xs">
-                <Activity className="w-6 h-6 mx-auto mb-2 text-slate-600 animate-pulse" />
+              <div className="text-center py-12 px-3 rounded-none border border-dashed border-white/10 text-slate-500 font-mono text-xs">
+                <Activity className="w-5 h-5 mx-auto mb-2 text-slate-600 animate-pulse" />
                 <p>Waiting for agent calls via WebMCP...</p>
                 <p className="text-[10px] text-slate-600 mt-1">
-                  Open in ChatGPT in-app browser or click "Agent Sandbox" to simulate.
+                  Open in ChatGPT in-app browser or click "Agent Sandbox" to trigger.
                 </p>
               </div>
             ) : (
-              <div className="space-y-2.5">
+              <div className="space-y-2">
                 {events.map((evt) => (
                   <div
                     key={evt.id}
-                    className="p-3 rounded-xl bg-dark-900/80 border border-white/[0.06] hover:border-brand-500/30 transition-all font-mono text-xs"
+                    className="p-2.5 rounded-none bg-dark-900 border border-white/[0.08] hover:border-brand-500/40 transition-all font-mono text-xs"
                   >
-                    <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center justify-between mb-1">
                       <span className="text-brand-300 font-bold text-[11px] flex items-center gap-1">
                         <Zap className="w-3 h-3 text-brand-400" />
                         {evt.toolName}
@@ -166,7 +163,7 @@ export const WebMcpInspector: React.FC<WebMcpInspectorProps> = ({
                     </div>
 
                     {evt.args && Object.keys(evt.args).length > 0 && (
-                      <div className="mt-2 p-2 rounded bg-dark-950/80 text-[10px] text-slate-400 overflow-x-auto border border-white/[0.04]">
+                      <div className="mt-1.5 p-1.5 rounded-none bg-dark-950 text-[10px] text-slate-400 overflow-x-auto border border-white/[0.04]">
                         <pre className="font-mono">{JSON.stringify(evt.args, null, 2)}</pre>
                       </div>
                     )}
@@ -178,14 +175,14 @@ export const WebMcpInspector: React.FC<WebMcpInspectorProps> = ({
         )}
 
         {activeTab === 'simulate' && (
-          <div className="space-y-4">
-            <div className="p-3 rounded-xl bg-brand-950/40 border border-brand-500/20 text-xs text-slate-300">
+          <div className="space-y-3">
+            <div className="p-3 rounded-none bg-brand-950/40 border border-brand-500/30 text-xs text-slate-300">
               <span className="font-bold text-brand-300 flex items-center gap-1 mb-1">
                 <Sparkles className="w-3.5 h-3.5 text-brand-400" />
                 <span>Judge & Reviewer Simulator</span>
               </span>
               <p className="text-[11px] text-slate-400">
-                Trigger exact WebMCP tool calls as if ChatGPT was visiting in its in-app browser.
+                Trigger exact WebMCP tool calls as if ChatGPT was connected in its in-app browser.
               </p>
             </div>
 
@@ -193,29 +190,29 @@ export const WebMcpInspector: React.FC<WebMcpInspectorProps> = ({
               <button
                 disabled={simulating}
                 onClick={() => handleSimulateScenario('top_rev')}
-                className="w-full text-left p-3 rounded-xl bg-dark-900 hover:bg-dark-800 border border-white/[0.08] hover:border-brand-500/40 transition-all group"
+                className="w-full text-left p-2.5 rounded-none bg-dark-900 hover:bg-dark-850 border border-white/[0.08] hover:border-brand-500/40 transition-all group"
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-bold text-white text-xs font-mono group-hover:text-brand-300">
-                    1. Analyze Category Revenues
+                    1. Query Category Revenues
                   </span>
-                  <Play className="w-3.5 h-3.5 text-brand-400 group-hover:translate-x-0.5 transition-transform" />
+                  <Play className="w-3.5 h-3.5 text-brand-400" />
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  Executes aggregation query + renders bar chart on active canvas.
+                  Executes aggregation SQL + renders live bar chart on active canvas.
                 </p>
               </button>
 
               <button
                 disabled={simulating}
                 onClick={() => handleSimulateScenario('critical_churn')}
-                className="w-full text-left p-3 rounded-xl bg-dark-900 hover:bg-dark-800 border border-white/[0.08] hover:border-purple-500/40 transition-all group"
+                className="w-full text-left p-2.5 rounded-none bg-dark-900 hover:bg-dark-850 border border-white/[0.08] hover:border-purple-500/40 transition-all group"
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-bold text-white text-xs font-mono group-hover:text-purple-300">
                     2. Isolate At-Risk Churn Accounts
                   </span>
-                  <Play className="w-3.5 h-3.5 text-purple-400 group-hover:translate-x-0.5 transition-transform" />
+                  <Play className="w-3.5 h-3.5 text-purple-400" />
                 </div>
                 <p className="text-[11px] text-slate-400">
                   Queries health_score &lt; 45 + renders area distribution chart.
@@ -225,16 +222,16 @@ export const WebMcpInspector: React.FC<WebMcpInspectorProps> = ({
               <button
                 disabled={simulating}
                 onClick={() => handleSimulateScenario('vitals_mobile')}
-                className="w-full text-left p-3 rounded-xl bg-dark-900 hover:bg-dark-800 border border-white/[0.08] hover:border-cyan-500/40 transition-all group"
+                className="w-full text-left p-2.5 rounded-none bg-dark-900 hover:bg-dark-850 border border-white/[0.08] hover:border-cyan-500/40 transition-all group"
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-bold text-white text-xs font-mono group-hover:text-cyan-300">
                     3. Audit Mobile LCP Route Latency
                   </span>
-                  <Play className="w-3.5 h-3.5 text-accent-cyan group-hover:translate-x-0.5 transition-transform" />
+                  <Play className="w-3.5 h-3.5 text-accent-cyan" />
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  Calculates mobile Web Vitals + renders donut share of slowest routes.
+                  Computes mobile Web Vitals + renders donut distribution of slowest routes.
                 </p>
               </button>
             </div>
@@ -242,30 +239,30 @@ export const WebMcpInspector: React.FC<WebMcpInspectorProps> = ({
         )}
 
         {activeTab === 'specs' && (
-          <div className="space-y-3 font-mono text-xs">
-            <div className="p-3 rounded-xl bg-dark-900 border border-white/[0.06]">
-              <div className="text-brand-300 font-bold mb-1">list_tables_and_schema</div>
+          <div className="space-y-2.5 font-mono text-xs">
+            <div className="p-2.5 rounded-none bg-dark-900 border border-white/[0.06]">
+              <div className="text-brand-300 font-bold mb-0.5">list_tables_and_schema</div>
               <p className="text-[11px] text-slate-400 font-sans">
                 Exposes available dataset tables, column definitions, data types, and row counts.
               </p>
             </div>
 
-            <div className="p-3 rounded-xl bg-dark-900 border border-white/[0.06]">
-              <div className="text-brand-300 font-bold mb-1">execute_sql_query(sql)</div>
+            <div className="p-2.5 rounded-none bg-dark-900 border border-white/[0.06]">
+              <div className="text-brand-300 font-bold mb-0.5">execute_sql_query(sql)</div>
               <p className="text-[11px] text-slate-400 font-sans">
-                Executes OLAP SQL directly inside client DuckDB-Wasm in &lt;10ms and returns structured JSON rows.
+                Executes OLAP SQL directly inside client AuraQL core in &lt;10ms and returns structured records.
               </p>
             </div>
 
-            <div className="p-3 rounded-xl bg-dark-900 border border-white/[0.06]">
-              <div className="text-brand-300 font-bold mb-1">render_interactive_chart(type, x, y)</div>
+            <div className="p-2.5 rounded-none bg-dark-900 border border-white/[0.06]">
+              <div className="text-brand-300 font-bold mb-0.5">render_interactive_chart(type, x, y)</div>
               <p className="text-[11px] text-slate-400 font-sans">
-                Controls the live browser viewport to render Bar, Area, Line, or Donut visualizations.
+                Commands the live browser viewport to render Bar, Area, Line, or Donut visualizations.
               </p>
             </div>
 
-            <div className="p-3 rounded-xl bg-dark-900 border border-white/[0.06]">
-              <div className="text-brand-300 font-bold mb-1">apply_dashboard_filter(col, val)</div>
+            <div className="p-2.5 rounded-none bg-dark-900 border border-white/[0.06]">
+              <div className="text-brand-300 font-bold mb-0.5">apply_dashboard_filter(col, val)</div>
               <p className="text-[11px] text-slate-400 font-sans">
                 Slices and filters the active dataset metrics and tabular view.
               </p>
