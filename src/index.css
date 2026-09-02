@@ -6,11 +6,21 @@
   color-scheme: dark;
 }
 
-body {
-  background-color: #06080D;
+:root:not(.dark) {
+  color-scheme: light;
 }
 
-/* Custom Scrollbar */
+body {
+  background-color: #06080D;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+:root:not(.dark) body {
+  background-color: #F8FAFC;
+  color: #0F172A;
+}
+
+/* Custom Scrollbar - Dark */
 ::-webkit-scrollbar {
   width: 5px;
   height: 5px;
@@ -20,21 +30,34 @@ body {
   background: #090D16;
 }
 
+:root:not(.dark) ::-webkit-scrollbar-track {
+  background: #F1F5F9;
+}
+
 ::-webkit-scrollbar-thumb {
   background: #1B243B;
   border-radius: 0px;
+}
+
+:root:not(.dark) ::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: #9333EA;
 }
 
-/* Sharp Glassmorphism & Precision Panels */
+/* Glassmorphism & Precision Panels */
 .glass-panel {
-  background: rgba(11, 15, 25, 0.85);
+  background: rgba(11, 15, 25, 0.88);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+:root:not(.dark) .glass-panel {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(226, 232, 240, 0.9);
 }
 
 .glass-card {
@@ -46,9 +69,20 @@ body {
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+:root:not(.dark) .glass-card {
+  background: #FFFFFF;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+}
+
 .glass-card:hover {
-  border-color: rgba(168, 85, 247, 0.4);
+  border-color: rgba(168, 85, 247, 0.45);
   box-shadow: 0 8px 32px -4px rgba(147, 51, 234, 0.2);
+}
+
+:root:not(.dark) .glass-card:hover {
+  border-color: rgba(147, 51, 234, 0.5);
+  box-shadow: 0 8px 24px -4px rgba(147, 51, 234, 0.12);
 }
 
 /* Sharp Cyber Buttons */
@@ -75,10 +109,22 @@ body {
   box-shadow: 0 0 60px -12px rgba(168, 85, 247, 0.35);
 }
 
-/* Subtle dot grid pattern */
+:root:not(.dark) .glow-purple-sm {
+  box-shadow: 0 0 16px -4px rgba(147, 51, 234, 0.25);
+}
+
+:root:not(.dark) .glow-purple-md {
+  box-shadow: 0 0 28px -6px rgba(147, 51, 234, 0.3);
+}
+
+/* Dot grid pattern */
 .dot-grid {
   background-size: 28px 28px;
   background-image: radial-gradient(rgba(168, 85, 247, 0.14) 1px, transparent 1px);
+}
+
+:root:not(.dark) .dot-grid {
+  background-image: radial-gradient(rgba(147, 51, 234, 0.1) 1px, transparent 1px);
 }
 
 /* Animated Neon Border Beam */
@@ -103,24 +149,4 @@ body {
 /* Tabular figures for telemetry & numbers */
 .tabular-nums {
   font-variant-numeric: tabular-nums;
-}
-
-/* Pulse radar animation */
-@keyframes pulseRadar {
-  0% {
-    transform: scale(0.95);
-    opacity: 0.8;
-  }
-  50% {
-    transform: scale(1.08);
-    opacity: 0.3;
-  }
-  100% {
-    transform: scale(0.95);
-    opacity: 0.8;
-  }
-}
-
-.animate-radar {
-  animation: pulseRadar 2.5s infinite ease-in-out;
 }

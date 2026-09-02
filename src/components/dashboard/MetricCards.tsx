@@ -1,5 +1,5 @@
 import React from 'react';
-import { DollarSign, Percent, ShoppingBag, Users, AlertTriangle, Activity, Gauge, Zap } from 'lucide-react';
+import { DollarSign, Percent, Activity, Zap } from 'lucide-react';
 import { auraEngine } from '../../engine/auraql';
 
 interface MetricCardsProps {
@@ -7,7 +7,6 @@ interface MetricCardsProps {
 }
 
 export const MetricCards: React.FC<MetricCardsProps> = ({ tableName }) => {
-  // Real live mathematical metrics computed dynamically from the active table!
   const live = auraEngine.computeLiveMetrics(tableName);
 
   const cards = [
@@ -35,7 +34,7 @@ export const MetricCards: React.FC<MetricCardsProps> = ({ tableName }) => {
       <svg width={width} height={height} className="overflow-visible">
         <polyline
           fill="none"
-          stroke="#C084FC"
+          stroke="#A855F7"
           strokeWidth="2"
           strokeLinecap="square"
           strokeLinejoin="miter"
@@ -52,28 +51,28 @@ export const MetricCards: React.FC<MetricCardsProps> = ({ tableName }) => {
         return (
           <div
             key={m.id}
-            className="glass-card rounded-none p-4 border border-white/[0.08] relative group overflow-hidden transition-all duration-200 hover:border-brand-500/50"
+            className="glass-card rounded-none p-4 border border-slate-200 dark:border-white/[0.08] relative group overflow-hidden transition-all duration-200 hover:border-brand-500/50"
           >
             {/* Ambient purple background hover glow */}
             <div className="absolute top-0 right-0 w-24 h-24 bg-brand-600/10 blur-xl group-hover:bg-brand-500/20 transition-all pointer-events-none" />
 
             <div className="flex items-center justify-between mb-2.5">
-              <span className="text-xs font-mono font-medium text-slate-400">{m.title}</span>
-              <div className="w-7 h-7 rounded-none bg-brand-950/80 border border-brand-500/30 flex items-center justify-center text-brand-400">
+              <span className="text-xs font-mono font-medium text-slate-500 dark:text-slate-400">{m.title}</span>
+              <div className="w-7 h-7 rounded-none bg-brand-50 dark:bg-brand-950/80 border border-brand-200 dark:border-brand-500/30 flex items-center justify-center text-brand-600 dark:text-brand-400">
                 <Icon className="w-3.5 h-3.5" />
               </div>
             </div>
 
             <div className="flex items-baseline justify-between gap-2 mb-2">
-              <span className="text-xl sm:text-2xl font-bold text-white tracking-tight font-mono tabular-nums">
+              <span className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight font-mono tabular-nums">
                 {m.value}
               </span>
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-none bg-brand-950 text-brand-300 border border-brand-500/30">
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-none bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-300 border border-brand-200 dark:border-brand-500/30 font-bold">
                 LIVE
               </span>
             </div>
 
-            <div className="flex items-center justify-between pt-2 border-t border-white/[0.06] text-[11px] font-mono text-slate-400">
+            <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-white/[0.06] text-[11px] font-mono text-slate-500 dark:text-slate-400">
               <span className="truncate max-w-[150px]">{m.sub}</span>
               <div className="shrink-0">{renderSparkline(m.sparkline)}</div>
             </div>

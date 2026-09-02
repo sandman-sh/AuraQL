@@ -78,19 +78,19 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-dark-950/85 backdrop-blur-sm">
-      <div className="glass-card rounded-none p-6 max-w-md w-full border border-white/[0.12] shadow-2xl relative">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-dark-950/85 backdrop-blur-sm">
+      <div className="glass-card rounded-none p-6 max-w-md w-full border border-slate-300 dark:border-white/[0.12] bg-white dark:bg-dark-950 shadow-2xl relative">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-none bg-brand-950 border border-brand-500/40 flex items-center justify-center text-brand-400">
+            <div className="w-7 h-7 rounded-none bg-brand-50 dark:bg-brand-950 border border-brand-200 dark:border-brand-500/40 flex items-center justify-center text-brand-600 dark:text-brand-400">
               <Upload className="w-3.5 h-3.5" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white font-mono">Import Custom Dataset</h3>
-              <p className="text-[11px] text-slate-400">Loads into AuraQL in-memory buffer (100% private)</p>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white font-mono">Import Custom Dataset</h3>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">Loads into AuraQL in-memory buffer (100% private)</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1 rounded-none text-slate-400 hover:text-white">
+          <button onClick={onClose} className="p-1 rounded-none text-slate-400 hover:text-slate-900 dark:hover:text-white">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -105,15 +105,15 @@ export const UploadModal: React.FC<UploadModalProps> = ({
           onDrop={handleDrop}
           className={`border border-dashed rounded-none p-7 flex flex-col items-center justify-center text-center transition-all ${
             dragOver
-              ? 'border-brand-500 bg-brand-950/40 glow-purple-sm'
-              : 'border-white/10 hover:border-brand-500/40 bg-dark-900/80'
+              ? 'border-brand-500 bg-brand-50/50 dark:bg-brand-950/40 glow-purple-sm'
+              : 'border-slate-300 hover:border-brand-500/50 bg-slate-50 dark:bg-dark-900/80 dark:border-white/10'
           }`}
         >
-          <FileText className="w-8 h-8 text-brand-400 mb-2.5" />
-          <p className="text-xs font-bold text-white mb-1 font-mono">
+          <FileText className="w-8 h-8 text-brand-600 dark:text-brand-400 mb-2.5" />
+          <p className="text-xs font-bold text-slate-900 dark:text-white mb-1 font-mono">
             Drag & drop CSV or JSON file here
           </p>
-          <p className="text-[11px] text-slate-400 mb-3.5">
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-3.5">
             Auto-detects data types and binds to WebMCP tools
           </p>
 
@@ -134,16 +134,16 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 
         {/* Status */}
         {status === 'parsing' && (
-          <div className="mt-3 p-2.5 rounded-none bg-brand-950/60 border border-brand-500/30 text-xs text-brand-300 flex items-center gap-2 font-mono">
-            <span className="w-2 h-2 rounded-none bg-brand-400 animate-ping" />
+          <div className="mt-3 p-2.5 rounded-none bg-brand-50 dark:bg-brand-950/60 border border-brand-200 dark:border-brand-500/30 text-xs text-brand-700 dark:text-brand-300 flex items-center gap-2 font-mono">
+            <span className="w-2 h-2 rounded-none bg-brand-500 animate-ping" />
             <span>Parsing into AuraQL columnar buffer...</span>
           </div>
         )}
 
         {status === 'done' && fileDetails && (
-          <div className="mt-3 p-2.5 rounded-none bg-emerald-950/60 border border-emerald-500/30 text-xs text-emerald-300 flex items-center justify-between font-mono">
+          <div className="mt-3 p-2.5 rounded-none bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-500/30 text-xs text-emerald-700 dark:text-emerald-300 flex items-center justify-between font-mono">
             <div className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
               <span>Loaded: <strong>{fileDetails.name}</strong> ({fileDetails.count} rows)</span>
             </div>
             <button
@@ -156,8 +156,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({
         )}
 
         {status === 'error' && (
-          <div className="mt-3 p-2.5 rounded-none bg-rose-950/60 border border-rose-500/30 text-xs text-rose-300 flex items-center gap-1.5 font-mono">
-            <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+          <div className="mt-3 p-2.5 rounded-none bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-500/30 text-xs text-rose-700 dark:text-rose-300 flex items-center gap-1.5 font-mono">
+            <AlertCircle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400 shrink-0" />
             <span>{errorMsg}</span>
           </div>
         )}

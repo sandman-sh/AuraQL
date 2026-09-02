@@ -142,7 +142,7 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
   const activeTableName = currentMeta?.tableName || String(activeDataset);
 
   return (
-    <div className="h-screen w-screen bg-dark-950 text-slate-100 flex flex-col overflow-hidden selection:bg-brand-500/30 selection:text-brand-300">
+    <div className="h-screen w-screen bg-slate-100 dark:bg-dark-950 text-slate-900 dark:text-slate-100 flex flex-col overflow-hidden selection:bg-brand-500/30 selection:text-brand-300 transition-colors">
       {/* Studio Header */}
       <Header
         activeDataset={activeDataset}

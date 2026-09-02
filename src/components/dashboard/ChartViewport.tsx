@@ -31,7 +31,7 @@ export const ChartViewport: React.FC<ChartViewportProps> = ({
 
   return (
     <div className={`glass-card rounded-none p-5 border transition-all duration-300 relative ${
-      isAgentUpdated ? 'border-brand-500 ring-1 ring-brand-500/50 glow-purple-md' : 'border-white/[0.08]'
+      isAgentUpdated ? 'border-brand-500 ring-1 ring-brand-500/50 glow-purple-md' : 'border-slate-200 dark:border-white/[0.08]'
     }`}>
       {/* Agent Commanded Banner */}
       {isAgentUpdated && (
@@ -45,35 +45,35 @@ export const ChartViewport: React.FC<ChartViewportProps> = ({
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
           <div className="flex items-center gap-2">
-            <h3 className="text-base font-bold text-white font-mono tracking-tight">{config.title}</h3>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-none bg-brand-950 text-brand-300 border border-brand-500/30">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white font-mono tracking-tight">{config.title}</h3>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-none bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-300 border border-brand-200 dark:border-brand-500/30">
               {config.type.toUpperCase()}
             </span>
           </div>
-          <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
             X-Axis: [{xKey}] &nbsp;•&nbsp; Y-Axis: [{yKey}] &nbsp;•&nbsp; {chartItems.length} active data points
           </p>
         </div>
 
         {/* Sharp Chart Type Toggles */}
-        <div className="flex items-center bg-dark-950 border border-white/[0.08] p-0.5 rounded-none">
+        <div className="flex items-center bg-slate-100 dark:bg-dark-950 border border-slate-200 dark:border-white/[0.08] p-0.5 rounded-none">
           <button
             onClick={() => onTypeChange('bar')}
-            className={`p-1.5 rounded-none text-xs transition-colors ${config.type === 'bar' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            className={`p-1.5 rounded-none text-xs transition-colors ${config.type === 'bar' ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
             title="Bar Visualization"
           >
             <BarChart3 className="w-4 h-4" />
           </button>
           <button
             onClick={() => onTypeChange('area')}
-            className={`p-1.5 rounded-none text-xs transition-colors ${config.type === 'area' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            className={`p-1.5 rounded-none text-xs transition-colors ${config.type === 'area' ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
             title="Area / Line Visualization"
           >
             <LineChart className="w-4 h-4" />
           </button>
           <button
             onClick={() => onTypeChange('donut')}
-            className={`p-1.5 rounded-none text-xs transition-colors ${config.type === 'donut' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            className={`p-1.5 rounded-none text-xs transition-colors ${config.type === 'donut' ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
             title="Donut Distribution"
           >
             <PieChart className="w-4 h-4" />
@@ -103,8 +103,8 @@ export const ChartViewport: React.FC<ChartViewportProps> = ({
                 >
                   {/* Tooltip */}
                   {isHovered && (
-                    <div className="absolute -top-11 z-20 px-2 py-0.5 rounded-none bg-dark-950 border border-brand-500 text-[10px] font-mono text-white shadow-xl whitespace-nowrap">
-                      <span className="text-brand-300 font-bold">{item.label}</span>: {item.value.toLocaleString()}
+                    <div className="absolute -top-11 z-20 px-2 py-0.5 rounded-none bg-slate-900 dark:bg-dark-950 border border-brand-500 text-[10px] font-mono text-white shadow-xl whitespace-nowrap">
+                      <span className="text-brand-400 font-bold">{item.label}</span>: {item.value.toLocaleString()}
                     </div>
                   )}
 
@@ -114,13 +114,13 @@ export const ChartViewport: React.FC<ChartViewportProps> = ({
                     className={`w-full rounded-none transition-all duration-200 border-t border-brand-300/40 relative ${
                       isHovered
                         ? 'bg-gradient-to-t from-brand-700 via-brand-500 to-purple-300 shadow-lg shadow-brand-500/50'
-                        : 'bg-gradient-to-t from-purple-950 via-brand-700 to-brand-500'
+                        : 'bg-gradient-to-t from-purple-900/60 dark:from-purple-950 via-brand-600 dark:via-brand-700 to-brand-500'
                     }`}
                   >
                     <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
 
-                  <span className="text-[10px] font-mono text-slate-400 mt-2 truncate w-full text-center">
+                  <span className="text-[10px] font-mono text-slate-600 dark:text-slate-400 mt-2 truncate w-full text-center">
                     {item.label}
                   </span>
                 </div>
@@ -133,7 +133,7 @@ export const ChartViewport: React.FC<ChartViewportProps> = ({
             <svg viewBox="0 0 500 130" preserveAspectRatio="none" className="w-full h-[190px] overflow-visible">
               <defs>
                 <linearGradient id="areaGlowSharp" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stopColor="#A855F7" stopOpacity="0.5" />
+                  <stop offset="0%" stopColor="#A855F7" stopOpacity="0.4" />
                   <stop offset="100%" stopColor="#A855F7" stopOpacity="0.0" />
                 </linearGradient>
               </defs>
@@ -151,7 +151,7 @@ export const ChartViewport: React.FC<ChartViewportProps> = ({
 
               <polyline
                 fill="none"
-                stroke="#C084FC"
+                stroke="#9333EA"
                 strokeWidth="2.5"
                 strokeLinecap="square"
                 strokeLinejoin="miter"
@@ -174,8 +174,8 @@ export const ChartViewport: React.FC<ChartViewportProps> = ({
                     y={y - 3}
                     width={6}
                     height={6}
-                    fill={hoveredIndex === i ? '#FFFFFF' : '#00F0FF'}
-                    stroke="#9333EA"
+                    fill={hoveredIndex === i ? '#9333EA' : '#00F0FF'}
+                    stroke="#581C87"
                     strokeWidth="1.5"
                     className="cursor-pointer"
                     onMouseEnter={() => setHoveredIndex(i)}
@@ -185,7 +185,7 @@ export const ChartViewport: React.FC<ChartViewportProps> = ({
               })}
             </svg>
 
-            <div className="flex justify-between w-full mt-2 text-[10px] font-mono text-slate-400">
+            <div className="flex justify-between w-full mt-2 text-[10px] font-mono text-slate-600 dark:text-slate-400">
               {chartItems.map((item, idx) => (
                 <span key={idx} className="truncate max-w-[55px] text-center">
                   {item.label}
@@ -217,7 +217,7 @@ export const ChartViewport: React.FC<ChartViewportProps> = ({
                         strokeWidth="15"
                         strokeDasharray={strokeDasharray}
                         strokeDashoffset={strokeDashoffset}
-                        className="transition-all hover:stroke-white cursor-pointer"
+                        className="transition-all hover:stroke-brand-500 cursor-pointer"
                         pathLength="100"
                         onMouseEnter={() => setHoveredIndex(i)}
                         onMouseLeave={() => setHoveredIndex(null)}
@@ -227,8 +227,8 @@ export const ChartViewport: React.FC<ChartViewportProps> = ({
                 })()}
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none font-mono">
-                <span className="text-[9px] text-slate-400 uppercase">Sum</span>
-                <span className="text-xs font-bold text-white">
+                <span className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Sum</span>
+                <span className="text-xs font-bold text-slate-900 dark:text-white">
                   {chartItems.reduce((acc, curr) => acc + curr.value, 0).toLocaleString()}
                 </span>
               </div>
@@ -238,7 +238,7 @@ export const ChartViewport: React.FC<ChartViewportProps> = ({
               {chartItems.slice(0, 6).map((item, i) => (
                 <div key={i} className="flex items-center gap-2 text-xs font-mono">
                   <span className="w-2 h-2 shrink-0 rounded-none" style={{ backgroundColor: purplePalette[i % purplePalette.length] }} />
-                  <span className="text-slate-300 truncate max-w-[110px]">{item.label}</span>
+                  <span className="text-slate-700 dark:text-slate-300 truncate max-w-[110px]">{item.label}</span>
                   <span className="text-slate-500 font-bold ml-auto">{item.value.toLocaleString()}</span>
                 </div>
               ))}
