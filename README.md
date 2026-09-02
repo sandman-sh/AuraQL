@@ -1,8 +1,8 @@
 # Aura Analytics (AuraQL) 🔮
 ### Zero-Server In-Browser OLAP Intelligence Powered by WebMCP & AuraQL
 
-> **Built for The WebMCP Challenge 2026**  
-> *Hosted by OpenAI, Google Chrome, Vercel, Cloudflare, Netlify, Render, and Shopify.*
+> **In-Browser Analytics for OpenAI Site Tools & Chrome WebMCP**  
+> *Built for high-performance, agent-native web applications with local data privacy.*
 
 ---
 

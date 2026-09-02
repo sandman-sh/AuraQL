@@ -71,7 +71,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchApp }) => {
       <section className="pt-20 pb-16 px-6 max-w-7xl mx-auto flex flex-col items-center text-center relative z-10">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-none bg-brand-950/90 border border-brand-500/40 text-xs font-mono text-brand-300 mb-8 shadow-inner">
           <Sparkles className="w-3.5 h-3.5 text-brand-400" />
-          <span>The WebMCP Challenge 2026 • Powered by AuraQL In-Memory Engine</span>
+          <span>Next-Gen Agent Web Standard • Powered by AuraQL In-Memory Engine</span>
         </div>
 
         <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-white max-w-5xl leading-[1.12] mb-6 font-sans">
@@ -378,9 +378,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchApp }) => {
             </div>
 
             <div>
-              <h5 className="font-bold text-white uppercase tracking-wider mb-3">Challenge & Standards</h5>
+              <h5 className="font-bold text-white uppercase tracking-wider mb-3">Ecosystem & Standards</h5>
               <ul className="space-y-2 text-slate-400">
-                <li><span>The WebMCP Challenge 2026</span></li>
+                <li><span>WebMCP Protocol Specification</span></li>
                 <li><span>OpenAI • Google Chrome</span></li>
                 <li><span>Vercel • Cloudflare • Netlify</span></li>
                 <li><span>Open Source MIT License</span></li>
