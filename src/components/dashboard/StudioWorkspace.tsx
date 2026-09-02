@@ -6,6 +6,10 @@ import { SqlConsole } from './SqlConsole';
 import { DataTable } from './DataTable';
 import { WebMcpInspector } from './WebMcpInspector';
 import { UploadModal } from '../modals/UploadModal';
+import { ExecutiveReportModal } from '../modals/ExecutiveReportModal';
+import { AiCommandBar } from './AiCommandBar';
+import { InsightBanner } from './InsightBanner';
+import { GlobalFilterBar } from './GlobalFilterBar';
 import { DatasetId, ChartConfig, QueryResult, WebMcpToolEvent, ChartType } from '../../types';
 import { auraEngine } from '../../engine/auraql';
 import { webMcp } from '../../engine/webmcp';
@@ -19,8 +23,11 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
   const [activeDataset, setActiveDataset] = useState<DatasetId>('ecommerce');
   const [isInspectorOpen, setIsInspectorOpen] = useState<boolean>(true);
   const [isUploadOpen, setIsUploadOpen] = useState<boolean>(false);
+  const [isReportOpen, setIsReportOpen] = useState<boolean>(false);
+  const [isProcessingAi, setIsProcessingAi] = useState<boolean>(false);
   const [events, setEvents] = useState<WebMcpToolEvent[]>([]);
   const [agentUpdated, setAgentUpdated] = useState<boolean>(false);
+  const [activeFilter, setActiveFilter] = useState<{ column: string; value: string } | null>(null);
 
   // Active Query State
   const defaultSql = DATASETS_METADATA.ecommerce.sampleQueries[0].sql;
@@ -63,10 +70,11 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
         setChartConfig(cfg);
         setAgentUpdated(true);
         setTimeout(() => setAgentUpdated(false), 3000);
+      } else if (type === 'filter') {
+        setActiveFilter(data);
       }
     });
 
-    // Run initial query with live calculations
     handleRunQuery(defaultSql);
 
     return () => {
@@ -77,6 +85,7 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
 
   const handleSelectDataset = (id: DatasetId) => {
     setActiveDataset(id);
+    setActiveFilter(null);
     const meta = DATASETS_METADATA[id];
     if (meta && meta.sampleQueries.length > 0) {
       const sql = meta.sampleQueries[0].sql;
@@ -127,6 +136,99 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
     }
   };
 
+  const handleApplyFilter = async (column: string, value: string) => {
+    setActiveFilter({ column, value });
+    const meta = DATASETS_METADATA[activeDataset];
+    const table = meta?.tableName || 'ecommerce_sales';
+
+    await webMcp.executeSimulatedTool('apply_dashboard_filter', {
+      column,
+      operator: '=',
+      value
+    });
+
+    // Re-run tailored query with WHERE filter applied
+    let filteredSql = '';
+    if (activeDataset === 'ecommerce') {
+      filteredSql = `SELECT product_category, ROUND(SUM(revenue), 2) as total_rev, ROUND(AVG(gross_margin_pct), 1) as avg_margin FROM ${table} WHERE ${column} = '${value}' GROUP BY product_category ORDER BY total_rev DESC;`;
+    } else if (activeDataset === 'churn') {
+      filteredSql = `SELECT company_name, monthly_mrr, health_score, utilization_pct FROM ${table} WHERE ${column} = '${value}' ORDER BY monthly_mrr DESC LIMIT 10;`;
+    } else if (activeDataset === 'webvitals') {
+      filteredSql = `SELECT url_path, ROUND(AVG(lcp_ms), 0) as avg_lcp_ms, ROUND(AVG(cls_score), 3) as avg_cls FROM ${table} WHERE ${column} = '${value}' GROUP BY url_path ORDER BY avg_lcp_ms DESC;`;
+    } else {
+      filteredSql = `SELECT * FROM ${table} WHERE ${column} = '${value}' LIMIT 50;`;
+    }
+
+    await handleRunQuery(filteredSql);
+  };
+
+  const handleClearFilter = async () => {
+    setActiveFilter(null);
+    const meta = DATASETS_METADATA[activeDataset];
+    if (meta?.sampleQueries[0]) {
+      await handleRunQuery(meta.sampleQueries[0].sql);
+    }
+  };
+
+  // Natural Language AI Co-Pilot command handler
+  const handleExecuteAiPrompt = async (promptText: string) => {
+    setIsProcessingAi(true);
+    try {
+      const lower = promptText.toLowerCase();
+      const meta = DATASETS_METADATA[activeDataset];
+      const table = meta?.tableName || 'ecommerce_sales';
+
+      if (lower.includes('category') || lower.includes('product') || (activeDataset === 'ecommerce' && !lower.includes('region'))) {
+        const sql = `SELECT product_category, ROUND(SUM(revenue), 2) as total_rev, ROUND(AVG(gross_margin_pct), 1) as avg_margin FROM ${table} GROUP BY product_category ORDER BY total_rev DESC;`;
+        await webMcp.executeSimulatedTool('execute_sql_query', { sql });
+        await webMcp.executeSimulatedTool('render_interactive_chart', {
+          type: 'bar',
+          title: 'Top Product Categories by Net Revenue',
+          xAxis: 'product_category',
+          yAxis: 'total_rev',
+          colorTheme: 'purple'
+        });
+      } else if (lower.includes('region') || lower.includes('velocity')) {
+        const sql = `SELECT region, COUNT(order_id) as total_orders, ROUND(SUM(revenue), 2) as total_revenue FROM ${table} GROUP BY region ORDER BY total_revenue DESC;`;
+        await webMcp.executeSimulatedTool('execute_sql_query', { sql });
+        await webMcp.executeSimulatedTool('render_interactive_chart', {
+          type: 'donut',
+          title: 'Regional Order Velocity & Revenue Share',
+          xAxis: 'region',
+          yAxis: 'total_revenue',
+          colorTheme: 'purple'
+        });
+      } else if (lower.includes('churn') || lower.includes('risk') || lower.includes('health')) {
+        const sql = `SELECT company_name, monthly_mrr, health_score FROM saas_churn_metrics WHERE health_score < 45 ORDER BY monthly_mrr DESC LIMIT 8;`;
+        await webMcp.executeSimulatedTool('execute_sql_query', { sql });
+        await webMcp.executeSimulatedTool('render_interactive_chart', {
+          type: 'area',
+          title: 'Critical Accounts ARR & Health Risk Distribution',
+          xAxis: 'company_name',
+          yAxis: 'monthly_mrr',
+          colorTheme: 'purple'
+        });
+      } else if (lower.includes('lcp') || lower.includes('device') || lower.includes('vitals')) {
+        const sql = `SELECT device_type, ROUND(AVG(lcp_ms), 0) as avg_lcp_ms, ROUND(AVG(inp_ms), 0) as avg_inp_ms FROM web_vitals_telemetry GROUP BY device_type;`;
+        await webMcp.executeSimulatedTool('execute_sql_query', { sql });
+        await webMcp.executeSimulatedTool('render_interactive_chart', {
+          type: 'bar',
+          title: 'Core Web Vitals Timing by Hardware Form Factor',
+          xAxis: 'device_type',
+          yAxis: 'avg_lcp_ms',
+          colorTheme: 'purple'
+        });
+      } else {
+        const sql = `SELECT * FROM ${table} LIMIT 25;`;
+        await webMcp.executeSimulatedTool('execute_sql_query', { sql });
+      }
+    } catch (err) {
+      console.error('Co-Pilot execution error:', err);
+    } finally {
+      setIsProcessingAi(false);
+    }
+  };
+
   const handleChartTypeChange = (type: ChartType) => {
     setChartConfig((prev) => ({ ...prev, type }));
   };
@@ -148,6 +250,7 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
         activeDataset={activeDataset}
         onSelectDataset={handleSelectDataset}
         onOpenUpload={() => setIsUploadOpen(true)}
+        onOpenReport={() => setIsReportOpen(true)}
         onToggleInspector={() => setIsInspectorOpen(!isInspectorOpen)}
         isInspectorOpen={isInspectorOpen}
         onReturnHome={onReturnHome}
@@ -159,6 +262,27 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
       <div className="flex-1 flex overflow-hidden relative">
         {/* Main Analytics Scrollable Area */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+          {/* Natural Language AI Co-Pilot Command Center */}
+          <AiCommandBar
+            activeDataset={activeDataset}
+            onExecutePrompt={handleExecuteAiPrompt}
+            isProcessing={isProcessingAi}
+          />
+
+          {/* Automated Executive Anomaly & Insights Banner */}
+          <InsightBanner
+            dataset={activeDataset}
+            onActionClick={handleRunQuery}
+          />
+
+          {/* Global Multi-Variable Cohort Slicers */}
+          <GlobalFilterBar
+            dataset={activeDataset}
+            activeFilter={activeFilter}
+            onApplyFilter={handleApplyFilter}
+            onClearFilter={handleClearFilter}
+          />
+
           {/* Dynamic Live Metric Cards computed from real data */}
           <MetricCards tableName={activeTableName} />
 
@@ -202,6 +326,15 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
         isOpen={isUploadOpen}
         onClose={() => setIsUploadOpen(false)}
         onDatasetImported={handleCustomDatasetImported}
+      />
+
+      {/* Executive Briefing & Export Modal */}
+      <ExecutiveReportModal
+        isOpen={isReportOpen}
+        onClose={() => setIsReportOpen(false)}
+        dataset={activeDataset}
+        queryResult={queryResult}
+        chartConfig={chartConfig}
       />
     </div>
   );

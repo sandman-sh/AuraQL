@@ -1,5 +1,5 @@
 import React from 'react';
-import { Upload, Home } from 'lucide-react';
+import { Upload, Home, FileText } from 'lucide-react';
 import { DatasetId } from '../../types';
 import { AuraLogo } from '../common/AuraLogo';
 import { ThemeToggle } from '../common/ThemeToggle';
@@ -8,6 +8,7 @@ interface HeaderProps {
   activeDataset: DatasetId;
   onSelectDataset: (id: DatasetId) => void;
   onOpenUpload: () => void;
+  onOpenReport: () => void;
   onToggleInspector: () => void;
   isInspectorOpen: boolean;
   onReturnHome: () => void;
@@ -19,6 +20,7 @@ export const Header: React.FC<HeaderProps> = ({
   activeDataset,
   onSelectDataset,
   onOpenUpload,
+  onOpenReport,
   onToggleInspector,
   isInspectorOpen,
   onReturnHome,
@@ -40,14 +42,14 @@ export const Header: React.FC<HeaderProps> = ({
               AURA <span className="text-brand-600 dark:text-brand-400">ANALYTICS</span>
             </span>
             <span className="text-[9px] uppercase tracking-wider font-mono px-1.5 py-0.5 rounded-none bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-300 border border-brand-200 dark:border-brand-500/40">
-              AuraQL Core
+              AuraQL Enterprise
             </span>
           </div>
         </button>
 
         <div className="h-4 w-[1px] bg-slate-200 dark:bg-white/10 mx-1 hidden sm:block" />
 
-        {/* Dataset Switcher with Sharp Buttons */}
+        {/* Dataset Switcher */}
         <div className="flex items-center bg-slate-100 dark:bg-dark-900 border border-slate-200 dark:border-white/[0.08] p-0.5 rounded-none">
           {(['ecommerce', 'churn', 'webvitals'] as DatasetId[]).map((id) => (
             <button
@@ -65,8 +67,18 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Right Actions with Sharp Cyber Buttons */}
+      {/* Right Actions */}
       <div className="flex items-center gap-2">
+        {/* Executive Report Modal Trigger */}
+        <button
+          onClick={onOpenReport}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-none text-xs font-mono font-semibold bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/60 dark:hover:bg-brand-900/60 text-brand-700 dark:text-brand-300 border border-brand-300 dark:border-brand-500/40 transition-colors"
+          title="Generate Executive Briefing & Export PDF"
+        >
+          <FileText className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
+          <span className="hidden sm:inline">Executive Briefing</span>
+        </button>
+
         {/* WebMCP Telemetry Indicator */}
         <button
           onClick={onToggleInspector}
