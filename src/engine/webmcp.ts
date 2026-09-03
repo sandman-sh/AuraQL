@@ -4,7 +4,7 @@ import { DATASETS_METADATA } from './datasets';
 
 type WebMcpEventListener = (event: WebMcpToolEvent) => void;
 type StateUpdateListener = (update: {
-  type: 'query' | 'chart' | 'filter' | 'dataset';
+  type: 'query' | 'chart' | 'filter' | 'dataset' | 'scenario' | 'anomalies';
   data: any;
 }) => void;
 
@@ -12,12 +12,17 @@ class WebMcpManager {
   private abortController: AbortController = new AbortController();
   private eventListeners: Set<WebMcpEventListener> = new Set();
   private stateListeners: Set<StateUpdateListener> = new Set();
+  private bridgeListeners: Set<(connected: boolean) => void> = new Set();
   private eventHistory: WebMcpToolEvent[] = [];
   public isNativeSupported: boolean = false;
+  public isBridgeConnected: boolean = false;
+  private bridgeEventSource: EventSource | null = null;
   private registeredTools: WebMcpToolRegistration[] = [];
 
   constructor() {
     this.detectCapabilities();
+    this.setupPostMessageBridge();
+    this.connectBridgeServer();
   }
 
   private detectCapabilities() {
@@ -31,6 +36,99 @@ class WebMcpManager {
     } catch {
       this.isNativeSupported = false;
     }
+  }
+
+  public subscribeBridgeStatus(listener: (connected: boolean) => void): () => void {
+    this.bridgeListeners.add(listener);
+    listener(this.isBridgeConnected);
+    return () => this.bridgeListeners.delete(listener);
+  }
+
+  private notifyBridgeStateChange() {
+    this.bridgeListeners.forEach((fn) => {
+      try {
+        fn(this.isBridgeConnected);
+      } catch {}
+    });
+  }
+
+  public connectBridgeServer(bridgeUrl: string = 'http://localhost:3001') {
+    if (typeof window === 'undefined') return;
+    if (this.bridgeEventSource) {
+      try {
+        this.bridgeEventSource.close();
+      } catch {}
+      this.bridgeEventSource = null;
+    }
+
+    try {
+      const sse = new EventSource(`${bridgeUrl}/api/bridge/events`);
+      this.bridgeEventSource = sse;
+
+      sse.onopen = () => {
+        this.isBridgeConnected = true;
+        this.notifyBridgeStateChange();
+        console.log('[WebMCP] Connected to external Agent Bridge on', bridgeUrl);
+      };
+
+      sse.onmessage = async (e) => {
+        try {
+          const payload = JSON.parse(e.data);
+          if (payload.type === 'CALL_TOOL') {
+            const { id, name, args } = payload;
+            const result = await this.callTool(name, args || {});
+            await fetch(`${bridgeUrl}/api/bridge/result`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id, result })
+            }).catch(() => {});
+          }
+        } catch (err) {
+          console.error('[WebMCP] Bridge message processing error:', err);
+        }
+      };
+
+      sse.onerror = () => {
+        if (this.isBridgeConnected) {
+          this.isBridgeConnected = false;
+          this.notifyBridgeStateChange();
+        }
+      };
+    } catch {
+      this.isBridgeConnected = false;
+      this.notifyBridgeStateChange();
+    }
+  }
+
+  private setupPostMessageBridge() {
+    if (typeof window === 'undefined') return;
+    if ((window as any).__webmcp_postmessage_ready) return;
+    (window as any).__webmcp_postmessage_ready = true;
+
+    window.addEventListener('message', async (event) => {
+      if (event.data && event.data.type === 'WEBMCP_CALL') {
+        const { id, tool, args } = event.data;
+        const result = await this.callTool(tool, args || {});
+        try {
+          event.source?.postMessage(
+            { type: 'WEBMCP_RESULT', id, result },
+            { targetOrigin: '*' } as any
+          );
+        } catch {
+          window.postMessage({ type: 'WEBMCP_RESULT', id, result }, '*');
+        }
+      }
+    });
+
+    window.addEventListener('webmcp:call', async (event: any) => {
+      if (event.detail) {
+        const { name, args, callback } = event.detail;
+        const result = await this.callTool(name, args || {});
+        if (typeof callback === 'function') {
+          callback(result);
+        }
+      }
+    });
   }
 
   public subscribeEvents(listener: WebMcpEventListener): () => void {
@@ -71,9 +169,15 @@ class WebMcpManager {
         console.error('[WebMCP] Event listener error:', e);
       }
     });
+
+    if (typeof window !== 'undefined') {
+      try {
+        window.dispatchEvent(new CustomEvent('webmcp:event', { detail: fullEvent }));
+      } catch {}
+    }
   }
 
-  private emitStateUpdate(type: 'query' | 'chart' | 'filter' | 'dataset', data: any) {
+  private emitStateUpdate(type: 'query' | 'chart' | 'filter' | 'dataset' | 'scenario' | 'anomalies', data: any) {
     this.stateListeners.forEach((fn) => {
       try {
         fn({ type, data });
@@ -312,6 +416,108 @@ class WebMcpManager {
               {
                 type: 'text',
                 text: `Dashboard filter active: ${filter.column} ${filter.operator || '='} ${filter.value}.`
+              }
+            ]
+          };
+        }
+      },
+
+      // Tool 5: What-If Scenario Simulation
+      {
+        name: 'simulate_forecast_scenario',
+        description:
+          'Executes in-memory what-if scenario simulations against columnar tables by applying metric multipliers or additive deltas (e.g. simulate +15% revenue growth or -20% churn), returning baseline vs projected variance analysis.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            tableName: {
+              type: 'string',
+              description: 'Target table to simulate against'
+            },
+            description: {
+              type: 'string',
+              description: 'Scenario name or thesis'
+            },
+            adjustments: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  column: { type: 'string', description: 'Metric column name' },
+                  multiplier: { type: 'number', description: 'Percentage factor (e.g. 1.15 for +15%, 0.80 for -20%)' },
+                  addDelta: { type: 'number', description: 'Constant addition or subtraction' },
+                  condition: { type: 'string', description: 'Optional row condition filter (e.g. churn_risk = "Critical")' }
+                },
+                required: ['column']
+              },
+              description: 'List of adjustment rules to apply'
+            }
+          },
+          required: ['tableName', 'adjustments']
+        },
+        execute: async (input: { tableName: string; adjustments: any[]; description?: string }) => {
+          const startTime = performance.now();
+          const simResult = auraEngine.simulateScenario(input.tableName, input.adjustments, input.description);
+          this.emitStateUpdate('scenario', simResult);
+          const duration = +(performance.now() - startTime).toFixed(1);
+
+          this.recordEvent({
+            toolName: 'simulate_forecast_scenario',
+            args: input,
+            resultSummary: `Simulated scenario: ${input.description || 'Forecast'} (${simResult.impactedRows}/${simResult.totalRows} rows adjusted)`,
+            durationMs: duration,
+            status: 'success'
+          });
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(simResult, null, 2)
+              }
+            ]
+          };
+        }
+      },
+
+      // Tool 6: Statistical Anomaly & Outlier Detection
+      {
+        name: 'detect_anomalies',
+        description:
+          'Analyzes numerical columns across in-memory AuraQL tables using statistical Z-scores and Interquartile Ranges (IQR) to detect spikes, severe drop-offs, and margin compression.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            tableName: {
+              type: 'string',
+              description: 'Table name to analyze'
+            },
+            column: {
+              type: 'string',
+              description: 'Optional specific column to inspect'
+            }
+          },
+          required: ['tableName']
+        },
+        execute: async (input: { tableName: string; column?: string }) => {
+          const startTime = performance.now();
+          const report = auraEngine.detectAnomalies(input.tableName, input.column);
+          this.emitStateUpdate('anomalies', report);
+          const duration = +(performance.now() - startTime).toFixed(1);
+
+          this.recordEvent({
+            toolName: 'detect_anomalies',
+            args: input,
+            resultSummary: `Found ${report.anomaliesFound} anomalies in "${input.tableName}"`,
+            durationMs: duration,
+            status: 'success'
+          });
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(report, null, 2)
               }
             ]
           };

@@ -67,20 +67,20 @@ export const DataTable: React.FC<DataTableProps> = ({ columns, rows, tableName }
   const safeColumns = columns || [];
 
   return (
-    <div className="glass-card rounded-none p-4 border border-slate-200 dark:border-white/[0.08]">
+    <div className="rounded-none p-4 w-full max-w-full overflow-hidden min-w-0 bg-white dark:bg-dark-950">
       {/* Header Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-        <div className="flex items-center gap-2">
-          <Table className="w-4 h-4 text-brand-600 dark:text-brand-400" />
-          <h4 className="text-xs font-bold text-slate-900 dark:text-white font-mono tracking-tight">
+      <div className="flex flex-wrap items-center justify-between gap-2.5 mb-3 min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <Table className="w-4 h-4 text-brand-600 dark:text-brand-400 shrink-0" />
+          <h4 className="text-xs font-bold text-slate-900 dark:text-white font-mono tracking-tight truncate">
             Query Records Stream
           </h4>
-          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-none bg-slate-100 dark:bg-dark-950 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-white/10">
+          <span className="hidden sm:inline-block text-[10px] font-mono px-1.5 py-0.5 rounded-none bg-slate-100 dark:bg-dark-950 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-white/10 shrink-0">
             {filteredRows.length} active records
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <div className="relative">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
             <input
@@ -90,8 +90,8 @@ export const DataTable: React.FC<DataTableProps> = ({ columns, rows, tableName }
                 setSearchTerm(e.target.value);
                 setCurrentPage(1);
               }}
-              placeholder="Search in-memory records..."
-              className="pl-8 pr-3 py-1 text-xs font-mono bg-white dark:bg-dark-950 border border-slate-200 dark:border-white/10 rounded-none focus:outline-none focus:border-brand-500 w-48 sm:w-60 text-slate-900 dark:text-white"
+              placeholder="Search..."
+              className="pl-8 pr-2 py-1 text-xs font-mono bg-white dark:bg-dark-950 border border-slate-200 dark:border-white/10 rounded-none focus:outline-none focus:border-brand-500 w-32 sm:w-48 text-slate-900 dark:text-white truncate"
             />
           </div>
 

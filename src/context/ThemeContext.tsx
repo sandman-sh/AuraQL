@@ -14,13 +14,13 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [theme, setThemeState] = useState<Theme>(() => {
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
-        const saved = window.localStorage.getItem('aura_theme') as Theme | null;
+        const saved = window.localStorage.getItem('aura_theme_v2') as Theme | null;
         if (saved === 'light' || saved === 'dark') return saved;
       }
     } catch (e) {
       console.warn('[ThemeContext] LocalStorage access blocked:', e);
     }
-    return 'dark';
+    return 'light';
   });
 
   useEffect(() => {
@@ -36,6 +36,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
       }
       if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem('aura_theme_v2', theme);
         window.localStorage.setItem('aura_theme', theme);
       }
     } catch (e) {
@@ -63,7 +64,7 @@ export const useTheme = (): ThemeContextType => {
   if (!context) {
     // Return a safe fallback rather than throwing a fatal render exception
     return {
-      theme: 'dark',
+      theme: 'light',
       toggleTheme: () => {},
       setTheme: () => {}
     };

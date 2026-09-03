@@ -21,6 +21,16 @@ export const ExecutiveReportModal: React.FC<ExecutiveReportModalProps> = ({
 }) => {
   const [copied, setCopied] = useState<boolean>(false);
 
+  // Close on Escape key
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const meta = DATASETS_METADATA[dataset];
@@ -33,7 +43,15 @@ export const ExecutiveReportModal: React.FC<ExecutiveReportModalProps> = ({
   });
 
   const handlePrint = () => {
+    const onAfterPrint = () => {
+      window.removeEventListener('afterprint', onAfterPrint);
+      onClose();
+    };
+    window.addEventListener('afterprint', onAfterPrint);
     window.print();
+    setTimeout(() => {
+      onClose();
+    }, 400);
   };
 
   const handleCopyJson = () => {
@@ -53,7 +71,12 @@ export const ExecutiveReportModal: React.FC<ExecutiveReportModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-dark-950/85 backdrop-blur-sm overflow-y-auto">
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm overflow-y-auto animate-fadeIn"
+    >
       <div className="glass-card rounded-none p-6 max-w-2xl w-full border border-slate-300 dark:border-white/[0.12] bg-white dark:bg-dark-950 shadow-2xl relative my-8">
         {/* Header */}
         <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-200 dark:border-white/10">
@@ -139,6 +162,12 @@ export const ExecutiveReportModal: React.FC<ExecutiveReportModalProps> = ({
           </button>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="btn-sharp px-3 py-1.5 text-xs font-mono bg-slate-200 hover:bg-slate-300 dark:bg-dark-800 dark:hover:bg-dark-700 text-slate-800 dark:text-slate-200 transition-colors"
+            >
+              Close
+            </button>
             <button
               onClick={handlePrint}
               className="btn-sharp px-4 py-1.5 text-xs font-mono font-bold bg-brand-600 hover:bg-brand-500 text-white flex items-center gap-1.5 shadow-sm transition-colors border border-brand-400/40"

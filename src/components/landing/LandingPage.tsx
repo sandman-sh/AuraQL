@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
-import { Zap, Shield, Sparkles, ArrowRight, Play, Cpu, Layers, Terminal, CheckCircle2, Activity } from 'lucide-react';
+import { Zap, Shield, Sparkles, ArrowRight, Play, Cpu, Layers, Terminal, CheckCircle2, Activity, BookOpen } from 'lucide-react';
 import { AuraLogo } from '../common/AuraLogo';
 import { ThemeToggle } from '../common/ThemeToggle';
+import { TypewriterHeading } from '../common/TypewriterHeading';
 import { auraEngine } from '../../engine/auraql';
 
 interface LandingPageProps {
   onLaunchApp: () => void;
+  onOpenDocs?: () => void;
 }
 
-export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchApp }) => {
+export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchApp, onOpenDocs }) => {
   const [activeTab, setActiveTab] = useState<'sql' | 'webmcp' | 'arch'>('webmcp');
   const [demoQueryState, setDemoQueryState] = useState<{
     status: 'idle' | 'running' | 'done';
@@ -71,6 +73,17 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchApp }) => {
           </nav>
 
           <div className="flex items-center gap-3">
+            {onOpenDocs && (
+              <button
+                onClick={onOpenDocs}
+                className="btn-sharp px-3.5 py-2 text-xs font-mono font-bold bg-slate-100 hover:bg-slate-200 dark:bg-dark-900 dark:hover:bg-dark-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-white/10 transition-colors flex items-center gap-1.5"
+                title="Read Documentation"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
+                <span>DOCS</span>
+              </button>
+            )}
+
             <ThemeToggle />
 
             <button
@@ -91,12 +104,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchApp }) => {
           <span>Next-Gen Agent Web Standard • Powered by AuraQL In-Memory Engine</span>
         </div>
 
-        <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-slate-900 dark:text-white max-w-5xl leading-[1.12] mb-6 font-sans">
-          In-Browser OLAP Intelligence for <br />
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-600 via-purple-500 to-accent-cyan dark:from-brand-400 dark:via-purple-300 dark:to-accent-cyan">
-            People and Their AI Agents
-          </span>
-        </h1>
+        {/* Dynamic Typewriter Heading on Hover */}
+        <TypewriterHeading
+          prefixText="In-Browser OLAP Intelligence for"
+          gradientText="People and Their AI Agents"
+        />
 
         <p className="text-base sm:text-lg text-slate-600 dark:text-slate-400 max-w-2xl mb-10 leading-relaxed font-normal">
           Zero-server vectorized SQL analytics directly in your browser tab. ChatGPT inspects in-memory data schemas, runs analytical queries in under 10ms, and updates live visual charts via <span className="text-brand-600 dark:text-brand-300 font-mono text-xs">document.modelContext</span>.
@@ -120,6 +132,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchApp }) => {
             <Play className="w-4 h-4 text-brand-600 dark:text-brand-400" />
             <span>EXPLORE SPECIFICATION</span>
           </a>
+
+          {onOpenDocs && (
+            <button
+              onClick={onOpenDocs}
+              className="btn-sharp w-full sm:w-auto px-6 py-4 text-sm font-mono font-medium bg-white hover:bg-slate-50 dark:bg-dark-900 dark:hover:bg-dark-850 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-all border border-slate-300 dark:border-white/10 flex items-center justify-center gap-2 shadow-sm"
+            >
+              <BookOpen className="w-4 h-4 text-brand-600 dark:text-brand-400" />
+              <span>READ DOCUMENTATION</span>
+            </button>
+          )}
         </div>
 
         {/* Live Metric Badges */}

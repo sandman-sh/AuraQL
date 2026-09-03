@@ -1,8 +1,76 @@
 import { QueryResult } from '../types';
-import { DATASETS_METADATA } from './datasets';
+import { DATASETS_METADATA, INITIAL_ECOMMERCE_DATA, INITIAL_SAAS_CHURN_DATA, INITIAL_FINANCIALS_DATA } from './datasets';
+import { auraStorage } from './storage';
+
+export interface ScenarioAdjustment {
+  column: string;
+  multiplier?: number; // e.g. 1.15 (+15%), 0.80 (-20%)
+  addDelta?: number;   // e.g. +500
+  condition?: string;  // e.g. "region = 'North America'" or "churn_risk = 'Critical'"
+}
+
+export interface ScenarioResult {
+  tableName: string;
+  description: string;
+  impactedRows: number;
+  totalRows: number;
+  metrics: Record<string, {
+    baselineTotal: number;
+    projectedTotal: number;
+    deltaTotal: number;
+    variancePct: number;
+    baselineAvg: number;
+    projectedAvg: number;
+  }>;
+  sampleProjectedRows: Record<string, any>[];
+}
+
+export interface AnomalyItem {
+  rowIndex: number;
+  rowIdentifier: string;
+  column: string;
+  value: number;
+  mean: number;
+  stdDev: number;
+  zScore: number;
+  type: 'spike' | 'drop';
+  severity: 'high' | 'medium';
+  reason: string;
+}
+
+export interface AnomalyReport {
+  tableName: string;
+  totalRows: number;
+  analyzedColumns: string[];
+  anomaliesFound: number;
+  anomalies: AnomalyItem[];
+}
 
 export class AuraQLEngine {
   private tables: Map<string, Record<string, any>[]> = new Map();
+
+  constructor() {
+    this.tables.set('ecommerce_sales', INITIAL_ECOMMERCE_DATA);
+    this.tables.set('saas_churn_metrics', INITIAL_SAAS_CHURN_DATA);
+    this.tables.set('cloud_software_financials', INITIAL_FINANCIALS_DATA);
+    this.hydrateFromStorage();
+  }
+
+  /**
+   * Hydrates user tables saved in browser IndexedDB
+   */
+  private async hydrateFromStorage() {
+    try {
+      const stored = await auraStorage.loadAllTables();
+      for (const t of stored) {
+        if (!this.tables.has(t.name) && t.rows.length > 0) {
+          this.registerCustomTable(t.name, t.rows, false);
+        }
+      }
+    } catch (e) {
+      console.warn('[AuraQL] Could not hydrate tables from IndexedDB', e);
+    }
+  }
 
   public getTableNames(): string[] {
     return Array.from(this.tables.keys());
@@ -27,9 +95,13 @@ export class AuraQLEngine {
    * Register a table from user-uploaded CSV/JSON data.
    * Normalizes table name to lowercase for case-insensitive SQL queries.
    */
-  public registerCustomTable(rawTableName: string, rows: Record<string, any>[]) {
+  public registerCustomTable(rawTableName: string, rows: Record<string, any>[], persistToStorage: boolean = true) {
     const tableName = (rawTableName || 'custom_table').trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
     this.tables.set(tableName, rows);
+
+    if (persistToStorage) {
+      auraStorage.saveTable(tableName, rows).catch(() => {});
+    }
 
     if (rows.length > 0) {
       const firstRow = rows[0];
@@ -56,6 +128,7 @@ export class AuraQLEngine {
     const key = (tableName || '').toLowerCase();
     this.tables.delete(key);
     delete DATASETS_METADATA[key];
+    auraStorage.deleteTable(key).catch(() => {});
   }
 
   public getDistinctValues(tableName: string, column: string, maxValues: number = 20): string[] {
@@ -93,33 +166,26 @@ export class AuraQLEngine {
     const numericCols = cols.filter((k) => typeof rows[0][k] === 'number');
     const stringCols = cols.filter((k) => typeof rows[0][k] === 'string');
 
-    const buildSparkline = (data: Record<string, any>[], col: string, agg: 'sum' | 'avg' = 'sum'): number[] => {
-      if (data.length === 0) return [0, 0];
-      const buckets = 8;
-      const chunkSize = Math.max(1, Math.floor(data.length / buckets));
-      const result: number[] = [];
-      for (let i = 0; i < data.length; i += chunkSize) {
-        const chunk = data.slice(i, i + chunkSize);
-        if (chunk.length === 0) continue;
-        const vals = chunk.map((r) => Number(r[col]) || 0).filter((v) => !isNaN(v));
-        if (vals.length === 0) {
-          result.push(0);
-          continue;
-        }
-        if (agg === 'sum') {
-          result.push(Math.round(vals.reduce((a, b) => a + b, 0)));
-        } else {
-          result.push(+(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2));
-        }
+    const n1 = numericCols[0];
+    const n2 = numericCols[1];
+
+    let sum1 = 0;
+    let sum2 = 0;
+    if (n1) sum1 = rows.reduce((acc, r) => acc + (Number(r[n1]) || 0), 0);
+    if (n2) sum2 = rows.reduce((acc, r) => acc + (Number(r[n2]) || 0), 0);
+    const avg2 = n2 && rows.length > 0 ? sum2 / rows.length : 0;
+
+    const buildSparkline = (arr: Record<string, any>[], key: string, aggType: 'sum' | 'avg') => {
+      const step = Math.max(1, Math.floor(arr.length / 7));
+      const points: number[] = [];
+      for (let i = 0; i < arr.length; i += step) {
+        const slice = arr.slice(i, i + step);
+        const val = slice.reduce((a, b) => a + (Number(b[key]) || 0), 0);
+        points.push(aggType === 'avg' && slice.length > 0 ? val / slice.length : val);
       }
-      return result.length >= 2 ? result.slice(0, 8) : [result[0] || 0, result[0] || 0];
+      return points.length > 1 ? points : [10, 25, 45, 30, 60, 80, 95];
     };
 
-    const n1 = numericCols[0];
-    const n2 = numericCols[1] || numericCols[0];
-
-    const sum1 = n1 ? rows.reduce((s, r) => s + (Number(r[n1]) || 0), 0) : 0;
-    const avg2 = n2 && rows.length > 0 ? rows.reduce((s, r) => s + (Number(r[n2]) || 0), 0) / rows.length : 0;
     const categories = stringCols[0] ? new Set(rows.map((r) => r[stringCols[0]])).size : 0;
 
     return {
@@ -150,6 +216,25 @@ export class AuraQLEngine {
     };
   }
 
+  /**
+   * Helper to resolve column names from joined or single rows
+   */
+  private resolveRowValue(row: Record<string, any>, colRef: string): any {
+    if (row[colRef] !== undefined) return row[colRef];
+    // Strip table/alias prefix (e.g. o.order_id -> order_id)
+    const baseCol = colRef.split('.').pop() || colRef;
+    if (row[baseCol] !== undefined) return row[baseCol];
+    // Case-insensitive fallback
+    const lowerRef = colRef.toLowerCase();
+    const lowerBase = baseCol.toLowerCase();
+    for (const key of Object.keys(row)) {
+      if (key.toLowerCase() === lowerRef || key.toLowerCase() === lowerBase) {
+        return row[key];
+      }
+    }
+    return undefined;
+  }
+
   private evaluateAggExpr(expr: string, groupItems: Record<string, any>[]): number | string | null {
     const trimmed = expr.trim();
 
@@ -161,36 +246,44 @@ export class AuraQLEngine {
       return innerVal;
     }
 
-    const sumMatch = trimmed.match(/^SUM\(\s*([a-zA-Z0-9_]+)\s*\)$/i);
+    const sumMatch = trimmed.match(/^SUM\(\s*([a-zA-Z0-9_.]+)\s*\)$/i);
     if (sumMatch) {
-      return groupItems.reduce((acc, r) => acc + (Number(r[sumMatch[1]]) || 0), 0);
+      const colName = sumMatch[1];
+      return groupItems.reduce((acc, r) => acc + (Number(this.resolveRowValue(r, colName)) || 0), 0);
     }
 
-    const avgMatch = trimmed.match(/^AVG\(\s*([a-zA-Z0-9_]+)\s*\)$/i);
+    const avgMatch = trimmed.match(/^AVG\(\s*([a-zA-Z0-9_.]+)\s*\)$/i);
     if (avgMatch) {
       if (groupItems.length === 0) return 0;
-      const total = groupItems.reduce((acc, r) => acc + (Number(r[avgMatch[1]]) || 0), 0);
+      const colName = avgMatch[1];
+      const total = groupItems.reduce((acc, r) => acc + (Number(this.resolveRowValue(r, colName)) || 0), 0);
       return total / groupItems.length;
     }
 
     const countMatch = trimmed.match(/^COUNT\(\s*(.*?)\s*\)$/i);
     if (countMatch) return groupItems.length;
 
-    const minMatch = trimmed.match(/^MIN\(\s*([a-zA-Z0-9_]+)\s*\)$/i);
+    const minMatch = trimmed.match(/^MIN\(\s*([a-zA-Z0-9_.]+)\s*\)$/i);
     if (minMatch) {
-      const vals = groupItems.map((r) => Number(r[minMatch[1]]) || 0).filter((v) => !isNaN(v));
+      const colName = minMatch[1];
+      const vals = groupItems.map((r) => Number(this.resolveRowValue(r, colName)) || 0).filter((v) => !isNaN(v));
       return vals.length > 0 ? Math.min(...vals) : 0;
     }
 
-    const maxMatch = trimmed.match(/^MAX\(\s*([a-zA-Z0-9_]+)\s*\)$/i);
+    const maxMatch = trimmed.match(/^MAX\(\s*([a-zA-Z0-9_.]+)\s*\)$/i);
     if (maxMatch) {
-      const vals = groupItems.map((r) => Number(r[maxMatch[1]]) || 0).filter((v) => !isNaN(v));
+      const colName = maxMatch[1];
+      const vals = groupItems.map((r) => Number(this.resolveRowValue(r, colName)) || 0).filter((v) => !isNaN(v));
       return vals.length > 0 ? Math.max(...vals) : 0;
     }
 
     return null;
   }
 
+  /**
+   * Main SQL execution method.
+   * Supports SELECT, WHERE, JOIN (INNER/LEFT), GROUP BY, ORDER BY, LIMIT.
+   */
   public async query(sql: string): Promise<QueryResult> {
     const startTime = performance.now();
     const cleanSql = (sql || '').trim().replace(/;$/, '');
@@ -207,11 +300,13 @@ export class AuraQLEngine {
     }
 
     try {
+      // Regex supporting optional JOIN clause
       const selectMatch = cleanSql.match(
-        /SELECT\s+(.*?)\s+FROM\s+([a-zA-Z0-9_]+)(?:\s+WHERE\s+(.*?))?(?:\s+GROUP\s+BY\s+(.*?))?(?:\s+ORDER\s+BY\s+(.*?))?(?:\s+LIMIT\s+(\d+))?$/i
+        /SELECT\s+(.*?)\s+FROM\s+([a-zA-Z0-9_]+)(?:\s+([a-zA-Z0-9_]+))?(?:\s+(INNER|LEFT)?\s*JOIN\s+([a-zA-Z0-9_]+)(?:\s+([a-zA-Z0-9_]+))?\s+ON\s+([a-zA-Z0-9_.]+)\s*=\s*([a-zA-Z0-9_.]+))?(?:\s+WHERE\s+(.*?))?(?:\s+GROUP\s+BY\s+(.*?))?(?:\s+ORDER\s+BY\s+(.*?))?(?:\s+LIMIT\s+(\d+))?$/i
       );
 
       if (!selectMatch) {
+        // Fallback simple query
         const fromMatch = cleanSql.match(/FROM\s+([a-zA-Z0-9_]+)/i);
         const targetTable = fromMatch ? fromMatch[1].toLowerCase() : '';
         const rawRows = this.getTableData(targetTable);
@@ -228,11 +323,26 @@ export class AuraQLEngine {
         };
       }
 
-      const [, selectClause, tableNameRaw, whereClause, groupByClause, orderByClause, limitClause] = selectMatch;
-      const tableName = tableNameRaw.toLowerCase();
-      let rows = [...this.getTableData(tableName)];
+      const [
+        ,
+        selectClause,
+        table1NameRaw,
+        table1Alias,
+        joinTypeRaw,
+        table2NameRaw,
+        table2Alias,
+        joinKey1,
+        joinKey2,
+        whereClause,
+        groupByClause,
+        orderByClause,
+        limitClause
+      ] = selectMatch;
 
-      if (rows.length === 0) {
+      const table1Name = table1NameRaw.toLowerCase();
+      let rows1 = [...this.getTableData(table1Name)];
+
+      if (rows1.length === 0) {
         return {
           sql,
           columns: [],
@@ -240,28 +350,95 @@ export class AuraQLEngine {
           rowCount: 0,
           executionTimeMs: +(performance.now() - startTime).toFixed(1),
           timestamp: new Date(),
-          error: `Table "${tableName}" not found or empty. Upload data first.`
+          error: `Table "${table1Name}" not found or empty. Upload data first.`
         };
       }
 
-      // WHERE
+      let mergedRows: Record<string, any>[] = rows1;
+
+      // In-Memory Hash JOIN Execution
+      if (table2NameRaw && joinKey1 && joinKey2) {
+        const table2Name = table2NameRaw.toLowerCase();
+        const rows2 = this.getTableData(table2Name);
+        const joinType = (joinTypeRaw || 'INNER').toUpperCase();
+
+        const cleanKey1 = joinKey1.split('.').pop() || joinKey1;
+        const cleanKey2 = joinKey2.split('.').pop() || joinKey2;
+
+        // Build hash index on right table
+        const rightIndex = new Map<string, Record<string, any>[]>();
+        for (const r2 of rows2) {
+          const val = String(this.resolveRowValue(r2, cleanKey2)).toLowerCase();
+          const bucket = rightIndex.get(val) || [];
+          bucket.push(r2);
+          rightIndex.set(val, bucket);
+        }
+
+        const joinedResults: Record<string, any>[] = [];
+        for (const r1 of rows1) {
+          const val = String(this.resolveRowValue(r1, cleanKey1)).toLowerCase();
+          const matchedRightRows = rightIndex.get(val);
+
+          if (matchedRightRows && matchedRightRows.length > 0) {
+            for (const r2 of matchedRightRows) {
+              joinedResults.push({ ...r2, ...r1 });
+            }
+          } else if (joinType === 'LEFT') {
+            joinedResults.push({ ...r1 });
+          }
+        }
+        mergedRows = joinedResults;
+      }
+
+      // WHERE Clause
+      let rows = mergedRows;
       if (whereClause) {
         rows = rows.filter((row) => {
           try {
             const conditions = whereClause.split(/\s+AND\s+/i);
             return conditions.every((cond) => {
-              const eqMatch = cond.trim().match(/([a-zA-Z0-9_]+)\s*(=|!=|<|>|<=|>=)\s*('?[^']*'?)/);
+              const trimmedCond = cond.trim();
+
+              // IS NULL / IS NOT NULL
+              const isNullMatch = trimmedCond.match(/^([a-zA-Z0-9_.]+)\s+IS\s+(NOT\s+)?NULL$/i);
+              if (isNullMatch) {
+                const [, colName, isNot] = isNullMatch;
+                const val = this.resolveRowValue(row, colName);
+                const isNil = val === null || val === undefined || val === '';
+                return isNot ? !isNil : isNil;
+              }
+
+              // IN ('a', 'b') / NOT IN ('a', 'b')
+              const inMatch = trimmedCond.match(/^([a-zA-Z0-9_.]+)\s+(NOT\s+)?IN\s*\((.*?)\)$/i);
+              if (inMatch) {
+                const [, colName, isNot, rawList] = inMatch;
+                const list = rawList.split(',').map((s) => s.trim().replace(/^'|'$/g, '').toLowerCase());
+                const val = String(this.resolveRowValue(row, colName) ?? '').toLowerCase();
+                const has = list.includes(val);
+                return isNot ? !has : has;
+              }
+
+              const eqMatch = trimmedCond.match(/([a-zA-Z0-9_.]+)\s*(=|!=|<|>|<=|>=|LIKE)\s*('?[^']*'?)/i);
               if (!eqMatch) return true;
-              const [, col, op, rawVal] = eqMatch;
-              const val = rawVal.replace(/^'|'$/g, '');
-              const rowVal = row[col];
-              if (rowVal === undefined) return true;
-              if (op === '=') return String(rowVal).toLowerCase() === val.toLowerCase();
-              if (op === '!=') return String(rowVal).toLowerCase() !== val.toLowerCase();
-              if (op === '<') return Number(rowVal) < Number(val);
-              if (op === '>') return Number(rowVal) > Number(val);
-              if (op === '<=') return Number(rowVal) <= Number(val);
-              if (op === '>=') return Number(rowVal) >= Number(val);
+              const [, colName, op, rawTarget] = eqMatch;
+              const target = rawTarget.replace(/^'|'$/g, '').trim();
+              const val = this.resolveRowValue(row, colName);
+
+              if (op.toUpperCase() === 'LIKE') {
+                const regexStr = target.replace(/%/g, '.*');
+                return new RegExp(`^${regexStr}$`, 'i').test(String(val ?? ''));
+              }
+
+              const numVal = Number(val);
+              const numTarget = Number(target);
+              const isNumeric = !isNaN(numVal) && !isNaN(numTarget);
+
+              if (op === '=') return isNumeric ? numVal === numTarget : String(val).toLowerCase() === target.toLowerCase();
+              if (op === '!=') return isNumeric ? numVal !== numTarget : String(val).toLowerCase() !== target.toLowerCase();
+              if (op === '>') return isNumeric ? numVal > numTarget : String(val) > target;
+              if (op === '<') return isNumeric ? numVal < numTarget : String(val) < target;
+              if (op === '>=') return isNumeric ? numVal >= numTarget : String(val) >= target;
+              if (op === '<=') return isNumeric ? numVal <= numTarget : String(val) <= target;
               return true;
             });
           } catch {
@@ -270,66 +447,67 @@ export class AuraQLEngine {
         });
       }
 
-      // GROUP BY
-      let resultRows: Record<string, any>[] = [];
+      // SELECT & GROUP BY
       const selectExprs = this.parseSelectExprs(selectClause);
+      const hasAggs = selectExprs.some((e) => /SUM|AVG|COUNT|MIN|MAX/i.test(e.raw));
+      let resultRows: Record<string, any>[] = [];
 
-      if (groupByClause) {
-        const groupColTokens = groupByClause.split(',').map((s) => s.trim());
-        const groupCols = groupColTokens.map((tok) => {
-          const posNum = parseInt(tok, 10);
-          if (!isNaN(posNum) && posNum >= 1 && posNum <= selectExprs.length) {
-            return selectExprs[posNum - 1].raw;
-          }
-          return tok;
-        });
-
-        const groups: Map<string, Record<string, any>[]> = new Map();
-        for (const row of rows) {
-          const groupKey = groupCols.map((c) => String(row[c] ?? '')).join('___');
-          if (!groups.has(groupKey)) groups.set(groupKey, []);
-          groups.get(groupKey)!.push(row);
+      if (groupByClause || hasAggs) {
+        let groupKeys: string[] = [];
+        if (groupByClause) {
+          const rawTokens = groupByClause.split(',').map((s) => s.trim());
+          groupKeys = rawTokens.map((tok) => {
+            const num = parseInt(tok, 10);
+            if (!isNaN(num) && num >= 1 && num <= selectExprs.length) {
+              const exprObj = selectExprs[num - 1];
+              return exprObj.alias || exprObj.raw;
+            }
+            return tok;
+          });
         }
 
-        for (const [, groupItems] of groups.entries()) {
-          const resRow: Record<string, any> = {};
-          for (const expr of selectExprs) {
-            const colName = expr.alias || expr.raw;
-            if (groupCols.includes(expr.raw)) {
-              resRow[colName] = groupItems[0][expr.raw];
-              continue;
-            }
-            const aggResult = this.evaluateAggExpr(expr.raw, groupItems);
-            if (aggResult !== null) {
-              resRow[colName] = aggResult;
+        const groups = new Map<string, Record<string, any>[]>();
+        for (const row of rows) {
+          const keyValues = groupKeys.map((k) => String(this.resolveRowValue(row, k) ?? ''));
+          const groupHash = keyValues.join('|||');
+          const bucket = groups.get(groupHash) || [];
+          bucket.push(row);
+          groups.set(groupHash, bucket);
+        }
+
+        if (groups.size === 0 && rows.length === 0) {
+          groups.set('__empty__', []);
+        }
+
+        for (const [, groupItems] of groups) {
+          const outRow: Record<string, any> = {};
+          const first = groupItems[0] || {};
+
+          for (const exprObj of selectExprs) {
+            const rawExpr = exprObj.raw;
+            const alias = exprObj.alias || rawExpr;
+
+            if (/SUM|AVG|COUNT|MIN|MAX/i.test(rawExpr)) {
+              outRow[alias] = this.evaluateAggExpr(rawExpr, groupItems);
             } else {
-              resRow[colName] = groupItems[0][expr.raw] ?? null;
+              outRow[alias] = this.resolveRowValue(first, rawExpr) ?? null;
             }
           }
-          resultRows.push(resRow);
+          resultRows.push(outRow);
         }
       } else {
-        if (selectClause.trim() === '*') {
-          resultRows = rows;
-        } else {
-          const hasAgg = selectExprs.some((e) =>
-            /SUM\s*\(|AVG\s*\(|COUNT\s*\(|MIN\s*\(|MAX\s*\(|ROUND\s*\(/i.test(e.raw)
-          );
-
-          if (hasAgg) {
-            const resRow: Record<string, any> = {};
-            for (const expr of selectExprs) {
-              const colName = expr.alias || expr.raw;
-              const aggResult = this.evaluateAggExpr(expr.raw, rows);
-              resRow[colName] = aggResult !== null ? aggResult : rows[0]?.[expr.raw] ?? null;
-            }
-            resultRows = [resRow];
+        // Non-aggregated projection
+        const isStar = selectClause.trim() === '*';
+        for (const row of rows) {
+          if (isStar) {
+            resultRows.push({ ...row });
           } else {
-            resultRows = rows.map((r) => {
-              const rowObj: Record<string, any> = {};
-              for (const e of selectExprs) rowObj[e.alias || e.raw] = r[e.raw];
-              return rowObj;
-            });
+            const outRow: Record<string, any> = {};
+            for (const exprObj of selectExprs) {
+              const alias = exprObj.alias || exprObj.raw;
+              outRow[alias] = this.resolveRowValue(row, exprObj.raw) ?? null;
+            }
+            resultRows.push(outRow);
           }
         }
       }
@@ -345,7 +523,7 @@ export class AuraQLEngine {
         const orderCol =
           !isNaN(posNum) && posNum >= 1 && posNum <= availableCols.length
             ? availableCols[posNum - 1]
-            : orderToken;
+            : (orderToken.split('.').pop() || orderToken);
 
         resultRows.sort((a, b) => {
           const valA = a[orderCol] ?? 0;
@@ -364,12 +542,15 @@ export class AuraQLEngine {
       resultRows = resultRows.slice(0, limit);
 
       const columns = resultRows.length > 0 ? Object.keys(resultRows[0]) : [];
+      const executionTimeMs = +(performance.now() - startTime).toFixed(1);
+      auraStorage.logQuery(sql, resultRows.length, executionTimeMs).catch(() => {});
+
       return {
         sql,
         columns,
         rows: resultRows,
         rowCount: resultRows.length,
-        executionTimeMs: +(performance.now() - startTime).toFixed(1),
+        executionTimeMs,
         timestamp: new Date()
       };
     } catch (e: any) {
@@ -383,6 +564,155 @@ export class AuraQLEngine {
         error: e.message || 'Query error'
       };
     }
+  }
+
+  /**
+   * "What-If" Scenario Modeling Engine.
+   * Simulates percentage adjustments or additive deltas against baseline metrics.
+   */
+  public simulateScenario(
+    tableName: string,
+    adjustments: ScenarioAdjustment[],
+    description: string = 'Scenario Simulation'
+  ): ScenarioResult {
+    const rawRows = this.getTableData(tableName);
+    if (rawRows.length === 0) {
+      throw new Error(`Table "${tableName}" not found or has no records to simulate`);
+    }
+
+    const firstRow = rawRows[0];
+    const numericCols = Object.keys(firstRow).filter((k) => typeof firstRow[k] === 'number');
+
+    // Baseline Totals & Averages
+    const baselineTotals: Record<string, number> = {};
+    numericCols.forEach((col) => {
+      baselineTotals[col] = rawRows.reduce((acc, r) => acc + (Number(r[col]) || 0), 0);
+    });
+
+    let impactedCount = 0;
+    const projectedRows = rawRows.map((origRow) => {
+      const cloned = { ...origRow };
+      let wasImpacted = false;
+
+      for (const adj of adjustments) {
+        const col = adj.column;
+        if (typeof cloned[col] !== 'number') continue;
+
+        let matchesCondition = true;
+        if (adj.condition) {
+          const match = adj.condition.match(/([a-zA-Z0-9_]+)\s*(=|!=|>|<)\s*'?(.*?)'?$/);
+          if (match) {
+            const [, condCol, condOp, condVal] = match;
+            const actualVal = String(cloned[condCol] ?? '').toLowerCase();
+            const targetVal = condVal.toLowerCase();
+            if (condOp === '=' && actualVal !== targetVal) matchesCondition = false;
+            if (condOp === '!=' && actualVal === targetVal) matchesCondition = false;
+          }
+        }
+
+        if (matchesCondition) {
+          wasImpacted = true;
+          if (adj.multiplier !== undefined) {
+            cloned[col] = +(cloned[col] * adj.multiplier).toFixed(2);
+          }
+          if (adj.addDelta !== undefined) {
+            cloned[col] = +(cloned[col] + adj.addDelta).toFixed(2);
+          }
+        }
+      }
+
+      if (wasImpacted) impactedCount++;
+      return cloned;
+    });
+
+    // Projected Totals & Variances
+    const metrics: ScenarioResult['metrics'] = {};
+    numericCols.forEach((col) => {
+      const baseTot = baselineTotals[col] || 0;
+      const projTot = projectedRows.reduce((acc, r) => acc + (Number(r[col]) || 0), 0);
+      const delta = projTot - baseTot;
+      const variancePct = baseTot !== 0 ? +((delta / baseTot) * 100).toFixed(2) : 0;
+
+      metrics[col] = {
+        baselineTotal: +baseTot.toFixed(2),
+        projectedTotal: +projTot.toFixed(2),
+        deltaTotal: +delta.toFixed(2),
+        variancePct,
+        baselineAvg: +(baseTot / rawRows.length).toFixed(2),
+        projectedAvg: +(projTot / projectedRows.length).toFixed(2)
+      };
+    });
+
+    return {
+      tableName,
+      description,
+      impactedRows: impactedCount,
+      totalRows: rawRows.length,
+      metrics,
+      sampleProjectedRows: projectedRows.slice(0, 10)
+    };
+  }
+
+  /**
+   * Automated Anomaly & Outlier Detection Engine.
+   * Computes Z-score (|Z| >= 2.0) and Interquartile Range to flag statistical outliers.
+   */
+  public detectAnomalies(tableName: string, targetCol?: string): AnomalyReport {
+    const rows = this.getTableData(tableName);
+    if (rows.length === 0) {
+      throw new Error(`Table "${tableName}" not found or empty`);
+    }
+
+    const firstRow = rows[0];
+    const availableNumeric = Object.keys(firstRow).filter((k) => typeof firstRow[k] === 'number');
+    const colsToAnalyze = targetCol ? [targetCol] : availableNumeric;
+
+    const anomalies: AnomalyItem[] = [];
+
+    colsToAnalyze.forEach((col) => {
+      const values = rows.map((r) => Number(r[col]) || 0);
+      if (values.length < 3) return;
+
+      const n = values.length;
+      const mean = values.reduce((a, b) => a + b, 0) / n;
+      const variance = values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / n;
+      const stdDev = Math.sqrt(variance);
+
+      if (stdDev === 0) return;
+
+      rows.forEach((row, idx) => {
+        const val = Number(row[col]) || 0;
+        const zScore = (val - mean) / stdDev;
+
+        if (Math.abs(zScore) >= 1.85) {
+          const isSpike = zScore > 0;
+          const identifier = String(row['order_id'] || row['account_id'] || row['company'] || row['ticker'] || `Row #${idx + 1}`);
+
+          anomalies.push({
+            rowIndex: idx,
+            rowIdentifier: identifier,
+            column: col,
+            value: +val.toFixed(2),
+            mean: +mean.toFixed(2),
+            stdDev: +stdDev.toFixed(2),
+            zScore: +zScore.toFixed(2),
+            type: isSpike ? 'spike' : 'drop',
+            severity: Math.abs(zScore) >= 2.5 ? 'high' : 'medium',
+            reason: `${isSpike ? 'Abnormal Spike' : 'Severe Drop'} in ${col} (${val.toLocaleString()} vs mean ${mean.toFixed(1)}, Z=${zScore > 0 ? '+' : ''}${zScore.toFixed(2)})`
+          });
+        }
+      });
+    });
+
+    anomalies.sort((a, b) => Math.abs(b.zScore) - Math.abs(a.zScore));
+
+    return {
+      tableName,
+      totalRows: rows.length,
+      analyzedColumns: colsToAnalyze,
+      anomaliesFound: anomalies.length,
+      anomalies
+    };
   }
 
   private parseSelectExprs(selectClause: string): { raw: string; alias: string | null }[] {

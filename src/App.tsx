@@ -1,24 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { LandingPage } from './components/landing/LandingPage';
 import { StudioWorkspace } from './components/dashboard/StudioWorkspace';
+import { DocsPage } from './components/docs/DocsPage';
 import { AuraLogo } from './components/common/AuraLogo';
 import { Sparkles } from 'lucide-react';
 
 export const App: React.FC = () => {
-  const [currentView, setCurrentView] = useState<'landing' | 'app'>('landing');
+  const [currentView, setCurrentView] = useState<'landing' | 'app' | 'docs'>('landing');
   const [isInitializing, setIsInitializing] = useState<boolean>(false);
 
   useEffect(() => {
     const handleHashChange = () => {
-      if (window.location.hash === '#/app') {
+      const hash = window.location.hash || '';
+      if (hash.startsWith('#/app') || hash.startsWith('#/share') || hash.includes('s=')) {
         setCurrentView('app');
+      } else if (hash.startsWith('#/docs')) {
+        setCurrentView('docs');
       } else {
         setCurrentView('landing');
       }
     };
 
-    if (window.location.hash === '#/app') {
+    const initialHash = window.location.hash || '';
+    if (initialHash.startsWith('#/app') || initialHash.startsWith('#/share') || initialHash.includes('s=')) {
       setCurrentView('app');
+    } else if (initialHash.startsWith('#/docs')) {
+      setCurrentView('docs');
     }
 
     window.addEventListener('hashchange', handleHashChange);
@@ -31,7 +38,12 @@ export const App: React.FC = () => {
       setIsInitializing(false);
       setCurrentView('app');
       window.location.hash = '#/app';
-    }, 500);
+    }, 400);
+  };
+
+  const handleOpenDocs = () => {
+    setCurrentView('docs');
+    window.location.hash = '#/docs';
   };
 
   const handleReturnHome = () => {
@@ -41,7 +53,7 @@ export const App: React.FC = () => {
 
   return (
     <>
-      {/* Sharp Workspace Transition / Loading Gate */}
+      {/* Workspace Transition / Loading Gate */}
       {isInitializing && (
         <div className="fixed inset-0 z-50 bg-white/95 dark:bg-dark-950/95 backdrop-blur-md flex flex-col items-center justify-center text-center p-6 selection:bg-brand-500/30 transition-colors">
           <div className="relative mb-6">
@@ -65,10 +77,14 @@ export const App: React.FC = () => {
       )}
 
       {/* Primary Route Views */}
-      {currentView === 'landing' ? (
-        <LandingPage onLaunchApp={handleLaunchApp} />
-      ) : (
-        <StudioWorkspace onReturnHome={handleReturnHome} />
+      {currentView === 'landing' && (
+        <LandingPage onLaunchApp={handleLaunchApp} onOpenDocs={handleOpenDocs} />
+      )}
+      {currentView === 'app' && (
+        <StudioWorkspace onReturnHome={handleReturnHome} onOpenDocs={handleOpenDocs} />
+      )}
+      {currentView === 'docs' && (
+        <DocsPage onBackToApp={handleLaunchApp} onReturnHome={handleReturnHome} />
       )}
     </>
   );

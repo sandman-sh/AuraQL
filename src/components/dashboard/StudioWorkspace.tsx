@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Header } from '../layout/Header';
 import { MetricCards } from './MetricCards';
 import { ChartViewport } from './ChartViewport';
@@ -7,29 +7,116 @@ import { DataTable } from './DataTable';
 import { WebMcpInspector } from './WebMcpInspector';
 import { UploadModal } from '../modals/UploadModal';
 import { ExecutiveReportModal } from '../modals/ExecutiveReportModal';
+import { AgentConnectModal } from '../modals/AgentConnectModal';
+import { ShareModal } from '../modals/ShareModal';
+import { ExportBriefingModal } from '../modals/ExportBriefingModal';
 import { AiCommandBar } from './AiCommandBar';
 import { InsightBanner } from './InsightBanner';
 import { GlobalFilterBar } from './GlobalFilterBar';
+import { WorkspaceWindow } from './WorkspaceWindow';
+import { SplitGutter } from './SplitGutter';
 import { ChartConfig, QueryResult, WebMcpToolEvent, ChartType } from '../../types';
 import { auraEngine } from '../../engine/auraql';
 import { webMcp } from '../../engine/webmcp';
+import { auraAgent } from '../../engine/agent';
+import { parseShareableUrl } from '../../engine/share';
 import { DATASETS_METADATA } from '../../engine/datasets';
-import { Upload, Database, Zap, ShieldCheck, Sparkles } from 'lucide-react';
+import {
+  Upload,
+  Database,
+  Zap,
+  ShieldCheck,
+  Sparkles,
+  LayoutGrid,
+  Columns,
+  RotateCcw,
+  BarChart2,
+  Terminal,
+  Activity,
+  Table as TableIcon
+} from 'lucide-react';
+
+export type WindowId = 'stats' | 'graph' | 'terminal' | 'table';
+
+const DEFAULT_SLOTS: WindowId[] = ['graph', 'terminal', 'stats', 'table'];
 
 interface StudioWorkspaceProps {
   onReturnHome: () => void;
+  onOpenDocs?: () => void;
 }
 
-export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }) => {
+export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome, onOpenDocs }) => {
   const initialTables = auraEngine.getTableNames();
-  const [activeDataset, setActiveDataset] = useState<string>(initialTables[0] || '');
+  const [activeDataset, setActiveDataset] = useState<string>(initialTables[0] || 'ecommerce_sales');
   const [isInspectorOpen, setIsInspectorOpen] = useState<boolean>(false);
   const [isUploadOpen, setIsUploadOpen] = useState<boolean>(false);
   const [isReportOpen, setIsReportOpen] = useState<boolean>(false);
+  const [isAgentModalOpen, setIsAgentModalOpen] = useState<boolean>(false);
+  const [isShareOpen, setIsShareOpen] = useState<boolean>(false);
+  const [isExportSlideOpen, setIsExportSlideOpen] = useState<boolean>(false);
+  const [scenarioResult, setScenarioResult] = useState<any>(null);
+  const [anomalyReport, setAnomalyReport] = useState<any>(null);
+  const [agentStatusMessage, setAgentStatusMessage] = useState<string>('');
   const [isProcessingAi, setIsProcessingAi] = useState<boolean>(false);
   const [events, setEvents] = useState<WebMcpToolEvent[]>([]);
   const [agentUpdated, setAgentUpdated] = useState<boolean>(false);
   const [activeFilter, setActiveFilter] = useState<{ column: string; value: string } | null>(null);
+
+  // Modular Workspace Layout State: 4 slots with dynamic percentage split & vertical height
+  const [slots, setSlots] = useState<WindowId[]>(DEFAULT_SLOTS);
+  const [row1Split, setRow1Split] = useState<number>(50); // Default equal 50%
+  const [row2Split, setRow2Split] = useState<number>(50); // Default equal 50%
+  const [row1Height, setRow1Height] = useState<number>(440); // Default row 1 height
+  const [row2Height, setRow2Height] = useState<number>(440); // Default row 2 height
+  const [verticalSplit, setVerticalSplit] = useState<number>(50); // Default 50/50 vertical split
+  const [windowHeights, setWindowHeights] = useState<Record<WindowId, number>>({
+    stats: 440,
+    graph: 440,
+    terminal: 440,
+    table: 440
+  });
+  const [isStacked, setIsStacked] = useState<boolean>(false);
+  const [minimizedWindows, setMinimizedWindows] = useState<Record<string, boolean>>({});
+  const [maximizedWindow, setMaximizedWindow] = useState<WindowId | null>(null);
+  const [draggedWindow, setDraggedWindow] = useState<WindowId | null>(null);
+  const [dragOverWindow, setDragOverWindow] = useState<WindowId | null>(null);
+
+  const row1Ref = useRef<HTMLDivElement>(null);
+  const row2Ref = useRef<HTMLDivElement>(null);
+  const workspaceGridRef = useRef<HTMLDivElement>(null);
+
+  // Load saved workspace layout preferences
+  useEffect(() => {
+    try {
+      const savedSlots = localStorage.getItem('auraql_slots_v3');
+      if (savedSlots) {
+        const parsed = JSON.parse(savedSlots);
+        if (Array.isArray(parsed) && parsed.length === 4) setSlots(parsed);
+      }
+      const savedSplits = localStorage.getItem('auraql_splits_v3');
+      if (savedSplits) {
+        const parsed = JSON.parse(savedSplits);
+        if (parsed.row1 !== undefined) setRow1Split(parsed.row1);
+        if (parsed.row2 !== undefined) setRow2Split(parsed.row2);
+        if (parsed.isStacked !== undefined) setIsStacked(parsed.isStacked);
+        if (parsed.row1Height !== undefined) setRow1Height(parsed.row1Height);
+        if (parsed.row2Height !== undefined) setRow2Height(parsed.row2Height);
+        if (parsed.verticalSplit !== undefined) setVerticalSplit(parsed.verticalSplit);
+      }
+    } catch {}
+  }, []);
+
+  // Restore dashboard state from URL hash if opened via Shareable Link
+  useEffect(() => {
+    const shared = parseShareableUrl();
+    if (shared) {
+      setActiveDataset(shared.table);
+      setCurrentSql(shared.sql);
+      setChartConfig(shared.chart as ChartConfig);
+      if (shared.filter) setActiveFilter(shared.filter);
+      auraEngine.query(shared.sql).then(setQueryResult);
+    }
+  }, []);
 
   // Active Query State
   const [currentSql, setCurrentSql] = useState<string>('');
@@ -85,6 +172,14 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
           const filteredSql = `SELECT * FROM ${activeDataset} WHERE ${data.column} = '${data.value}' LIMIT 50;`;
           handleRunQuery(filteredSql);
         }
+      } else if (type === 'scenario') {
+        setScenarioResult(data);
+        setAgentUpdated(true);
+        setTimeout(() => setAgentUpdated(false), 4000);
+      } else if (type === 'anomalies') {
+        setAnomalyReport(data);
+        setAgentUpdated(true);
+        setTimeout(() => setAgentUpdated(false), 4000);
       }
     });
 
@@ -197,56 +292,31 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
     await handleRunQuery(defaultSql);
   };
 
-  // Natural Language Query Assistant that calls real WebMCP tools
+  // Autonomous AI Agent execution loop connected to WebMCP
   const handleExecuteAiPrompt = async (promptText: string) => {
     if (!activeDataset) return;
     setIsProcessingAi(true);
+    setAgentStatusMessage('Initializing AI agent...');
 
     try {
-      const rows = auraEngine.getTableData(activeDataset);
-      if (!rows || rows.length === 0 || !rows[0]) return;
-
-      const firstRow = rows[0];
-      const numericCols = Object.keys(firstRow).filter((k) => typeof firstRow[k] === 'number');
-      const stringCols = Object.keys(firstRow).filter(
-        (k) => typeof firstRow[k] === 'string' && !k.toLowerCase().includes('id')
-      );
-
-      const numCol = numericCols[0] || Object.keys(firstRow)[1] || 'value';
-      const dimCol = stringCols[0] || Object.keys(firstRow)[0] || 'category';
-      const lower = promptText.toLowerCase();
-
-      let targetSql = '';
-      let targetChartType: ChartType = 'bar';
-
-      if (lower.includes('area') || lower.includes('trend')) {
-        targetChartType = 'area';
-        targetSql = `SELECT ${dimCol}, ROUND(SUM(${numCol}), 2) as total_${numCol} FROM ${activeDataset} GROUP BY ${dimCol} ORDER BY total_${numCol} DESC LIMIT 10;`;
-      } else if (lower.includes('donut') || lower.includes('pie') || lower.includes('share')) {
-        targetChartType = 'donut';
-        targetSql = `SELECT ${dimCol}, ROUND(SUM(${numCol}), 2) as total_${numCol} FROM ${activeDataset} GROUP BY ${dimCol} ORDER BY total_${numCol} DESC LIMIT 8;`;
-      } else if (lower.includes('line')) {
-        targetChartType = 'line';
-        targetSql = `SELECT ${dimCol}, ROUND(AVG(${numCol}), 2) as avg_${numCol} FROM ${activeDataset} GROUP BY ${dimCol} LIMIT 15;`;
-      } else if (lower.includes('top') || lower.includes('aggregate') || lower.includes('sum')) {
-        targetChartType = 'bar';
-        targetSql = `SELECT ${dimCol}, ROUND(SUM(${numCol}), 2) as total_${numCol} FROM ${activeDataset} GROUP BY ${dimCol} ORDER BY total_${numCol} DESC LIMIT 10;`;
-      } else {
-        targetSql = `SELECT * FROM ${activeDataset} LIMIT 25;`;
-      }
-
-      await webMcp.callTool('execute_sql_query', { sql: targetSql });
-      await webMcp.callTool('render_interactive_chart', {
-        type: targetChartType,
-        title: `Dynamic View: ${numCol} by ${dimCol}`,
-        xAxis: dimCol,
-        yAxis: `total_${numCol}`,
-        colorTheme: 'purple'
+      const res = await auraAgent.run(promptText, activeDataset, (step) => {
+        setAgentStatusMessage(step.message);
       });
-    } catch (err) {
-      console.error('Co-Pilot execution error:', err);
+
+      if (res.success) {
+        setAgentUpdated(true);
+        setTimeout(() => setAgentUpdated(false), 3000);
+      } else {
+        setAgentStatusMessage(res.finalMessage);
+      }
+    } catch (err: any) {
+      console.error('AI Agent execution error:', err);
+      setAgentStatusMessage(`Error: ${err.message || 'Execution error'}`);
     } finally {
-      setIsProcessingAi(false);
+      setTimeout(() => {
+        setIsProcessingAi(false);
+        setAgentStatusMessage('');
+      }, 1800);
     }
   };
 
@@ -297,6 +367,326 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
     handleCustomDatasetImported('cloud_software_financials', sampleRows.length);
   };
 
+  // Layout Persistence Helper
+  const saveLayout = (
+    newSlots: WindowId[],
+    r1: number,
+    r2: number,
+    stacked: boolean,
+    h1?: number,
+    h2?: number,
+    vSplit?: number
+  ) => {
+    try {
+      localStorage.setItem('auraql_slots_v3', JSON.stringify(newSlots));
+      localStorage.setItem(
+        'auraql_splits_v3',
+        JSON.stringify({
+          row1: r1,
+          row2: r2,
+          isStacked: stacked,
+          row1Height: h1 ?? row1Height,
+          row2Height: h2 ?? row2Height,
+          verticalSplit: vSplit ?? verticalSplit
+        })
+      );
+    } catch {}
+  };
+
+  // Drag & Drop Window Position Swapping
+  const handleDragStart = (id: WindowId) => {
+    setDraggedWindow(id);
+  };
+
+  const handleDragOver = (e: React.DragEvent, id: WindowId) => {
+    e.preventDefault();
+    if (draggedWindow && draggedWindow !== id) {
+      setDragOverWindow(id);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, targetId: WindowId) => {
+    e.preventDefault();
+    if (!draggedWindow || draggedWindow === targetId) {
+      setDraggedWindow(null);
+      setDragOverWindow(null);
+      return;
+    }
+
+    const fromIdx = slots.indexOf(draggedWindow);
+    const toIdx = slots.indexOf(targetId);
+    if (fromIdx !== -1 && toIdx !== -1) {
+      const newSlots = [...slots];
+      newSlots[fromIdx] = targetId;
+      newSlots[toIdx] = draggedWindow;
+      setSlots(newSlots);
+      saveLayout(newSlots, row1Split, row2Split, isStacked, row1Height, row2Height, verticalSplit);
+    }
+    setDraggedWindow(null);
+    setDragOverWindow(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedWindow(null);
+    setDragOverWindow(null);
+  };
+
+  // Real-time Resizing with Dynamic Sibling Auto-Adjustment
+  const handleRow1SplitChange = (newPct: number) => {
+    setRow1Split(newPct);
+    saveLayout(slots, newPct, row2Split, isStacked, row1Height, row2Height, verticalSplit);
+  };
+
+  const handleRow2SplitChange = (newPct: number) => {
+    setRow2Split(newPct);
+    saveLayout(slots, row1Split, newPct, isStacked, row1Height, row2Height, verticalSplit);
+  };
+
+  // Downward / Height Resizing Handlers
+  const handleRow1HeightChange = (newH: number) => {
+    setRow1Height(newH);
+    setWindowHeights((prev) => ({ ...prev, [slots[0]]: newH, [slots[1]]: newH }));
+    saveLayout(slots, row1Split, row2Split, isStacked, newH, row2Height, verticalSplit);
+  };
+
+  const handleRow2HeightChange = (newH: number) => {
+    setRow2Height(newH);
+    setWindowHeights((prev) => ({ ...prev, [slots[2]]: newH, [slots[3]]: newH }));
+    saveLayout(slots, row1Split, row2Split, isStacked, row1Height, newH, verticalSplit);
+  };
+
+  const handleVerticalSplitChange = (newPct: number) => {
+    setVerticalSplit(newPct);
+    const totalHeight = (row1Height + row2Height) || 880;
+    const newH1 = Math.max(240, Math.round((newPct / 100) * totalHeight));
+    const newH2 = Math.max(240, totalHeight - newH1);
+    setRow1Height(newH1);
+    setRow2Height(newH2);
+    setWindowHeights((prev) => ({
+      ...prev,
+      [slots[0]]: newH1,
+      [slots[1]]: newH1,
+      [slots[2]]: newH2,
+      [slots[3]]: newH2
+    }));
+    saveLayout(slots, row1Split, row2Split, isStacked, newH1, newH2, newPct);
+  };
+
+  // When a user selects a width percentage on an individual window
+  const handleWindowSetWidth = (id: WindowId, desiredPct: number) => {
+    if (id === slots[0]) {
+      handleRow1SplitChange(desiredPct);
+    } else if (id === slots[1]) {
+      handleRow1SplitChange(100 - desiredPct);
+    } else if (id === slots[2]) {
+      handleRow2SplitChange(desiredPct);
+    } else if (id === slots[3]) {
+      handleRow2SplitChange(100 - desiredPct);
+    }
+  };
+
+  const toggleMinimize = (id: WindowId) => {
+    setMinimizedWindows((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const toggleMaximize = (id: WindowId) => {
+    setMaximizedWindow((prev) => (prev === id ? null : id));
+  };
+
+  // Presets
+  const applyPreset = (preset: 'equal' | 'wideGraph' | 'wideSql' | 'stacked') => {
+    if (preset === 'equal') {
+      setRow1Split(50);
+      setRow2Split(50);
+      setRow1Height(440);
+      setRow2Height(440);
+      setVerticalSplit(50);
+      setIsStacked(false);
+      saveLayout(slots, 50, 50, false, 440, 440, 50);
+    } else if (preset === 'wideGraph') {
+      setRow1Split(65);
+      setRow2Split(50);
+      setRow1Height(480);
+      setRow2Height(400);
+      setVerticalSplit(55);
+      setIsStacked(false);
+      saveLayout(slots, 65, 50, false, 480, 400, 55);
+    } else if (preset === 'wideSql') {
+      setRow1Split(35);
+      setRow2Split(50);
+      setRow1Height(480);
+      setRow2Height(400);
+      setVerticalSplit(55);
+      setIsStacked(false);
+      saveLayout(slots, 35, 50, false, 480, 400, 55);
+    } else if (preset === 'stacked') {
+      setIsStacked(true);
+      saveLayout(slots, row1Split, row2Split, true, row1Height, row2Height, verticalSplit);
+    }
+  };
+
+  const resetLayout = () => {
+    const defaultSlots: WindowId[] = ['graph', 'terminal', 'stats', 'table'];
+    setSlots(defaultSlots);
+    setRow1Split(50);
+    setRow2Split(50);
+    setRow1Height(440);
+    setRow2Height(440);
+    setVerticalSplit(50);
+    setIsStacked(false);
+    setMinimizedWindows({});
+    setMaximizedWindow(null);
+    try {
+      localStorage.removeItem('auraql_slots_v3');
+      localStorage.removeItem('auraql_splits_v3');
+    } catch {}
+  };
+
+  const renderWindowContent = (id: WindowId, widthPct: number) => {
+    const isRow1 = id === slots[0] || id === slots[1];
+    const currentHeight = isStacked ? (windowHeights[id] || 440) : (isRow1 ? row1Height : row2Height);
+    const handleHeightChange = (newH: number) => {
+      if (isStacked) {
+        setWindowHeights((prev) => ({ ...prev, [id]: newH }));
+      } else if (isRow1) {
+        handleRow1HeightChange(newH);
+      } else {
+        handleRow2HeightChange(newH);
+      }
+    };
+
+    switch (id) {
+      case 'stats':
+        return (
+          <WorkspaceWindow
+            key={id}
+            id={id}
+            title="Executive KPI Metrics"
+            icon={<Activity className="w-3.5 h-3.5" />}
+            statusBadge="4 ATTRIBUTES"
+            widthPct={widthPct}
+            heightPx={currentHeight}
+            onHeightChange={handleHeightChange}
+            isFullWidth={isStacked}
+            onSetWidth={(pct) => handleWindowSetWidth(id, pct)}
+            isMinimized={!!minimizedWindows[id]}
+            onToggleMinimize={() => toggleMinimize(id)}
+            isMaximized={maximizedWindow === id}
+            onToggleMaximize={() => toggleMaximize(id)}
+            onDragStart={() => handleDragStart(id)}
+            onDragOver={(e) => handleDragOver(e, id)}
+            onDrop={(e) => handleDrop(e, id)}
+            onDragEnd={handleDragEnd}
+            isDragging={draggedWindow === id}
+            isDragOver={dragOverWindow === id}
+          >
+            <MetricCards tableName={activeDataset} />
+          </WorkspaceWindow>
+        );
+
+      case 'graph':
+        return (
+          <WorkspaceWindow
+            key={id}
+            id={id}
+            title="Analytics Viewport Canvas"
+            icon={<BarChart2 className="w-3.5 h-3.5" />}
+            statusBadge={`${(chartConfig.type || 'bar').toUpperCase()} • LIVE`}
+            widthPct={widthPct}
+            heightPx={currentHeight}
+            onHeightChange={handleHeightChange}
+            isFullWidth={isStacked}
+            onSetWidth={(pct) => handleWindowSetWidth(id, pct)}
+            isMinimized={!!minimizedWindows[id]}
+            onToggleMinimize={() => toggleMinimize(id)}
+            isMaximized={maximizedWindow === id}
+            onToggleMaximize={() => toggleMaximize(id)}
+            onDragStart={() => handleDragStart(id)}
+            onDragOver={(e) => handleDragOver(e, id)}
+            onDrop={(e) => handleDrop(e, id)}
+            onDragEnd={handleDragEnd}
+            isDragging={draggedWindow === id}
+            isDragOver={dragOverWindow === id}
+          >
+            <ChartViewport
+              config={chartConfig}
+              data={queryResult.rows}
+              onTypeChange={handleChartTypeChange}
+              isAgentUpdated={agentUpdated}
+            />
+          </WorkspaceWindow>
+        );
+
+      case 'terminal':
+        return (
+          <WorkspaceWindow
+            key={id}
+            id={id}
+            title="AuraQL SQL Console"
+            icon={<Terminal className="w-3.5 h-3.5" />}
+            statusBadge={`${queryResult.executionTimeMs}ms • IN-MEMORY`}
+            widthPct={widthPct}
+            heightPx={currentHeight}
+            onHeightChange={handleHeightChange}
+            isFullWidth={isStacked}
+            onSetWidth={(pct) => handleWindowSetWidth(id, pct)}
+            isMinimized={!!minimizedWindows[id]}
+            onToggleMinimize={() => toggleMinimize(id)}
+            isMaximized={maximizedWindow === id}
+            onToggleMaximize={() => toggleMaximize(id)}
+            onDragStart={() => handleDragStart(id)}
+            onDragOver={(e) => handleDragOver(e, id)}
+            onDrop={(e) => handleDrop(e, id)}
+            onDragEnd={handleDragEnd}
+            isDragging={draggedWindow === id}
+            isDragOver={dragOverWindow === id}
+          >
+            <SqlConsole
+              activeDataset={activeDataset}
+              currentSql={currentSql}
+              onRunSql={handleRunQuery}
+              executionTimeMs={queryResult.executionTimeMs}
+              rowCount={queryResult.rowCount}
+              isAgentExecuting={agentUpdated}
+              errorMessage={queryResult.error}
+            />
+          </WorkspaceWindow>
+        );
+
+      case 'table':
+        return (
+          <WorkspaceWindow
+            key={id}
+            id={id}
+            title="Live OLAP Data Grid"
+            icon={<TableIcon className="w-3.5 h-3.5" />}
+            statusBadge={`${queryResult.rowCount} RECORDS`}
+            widthPct={widthPct}
+            heightPx={currentHeight}
+            onHeightChange={handleHeightChange}
+            isFullWidth={isStacked}
+            onSetWidth={(pct) => handleWindowSetWidth(id, pct)}
+            isMinimized={!!minimizedWindows[id]}
+            onToggleMinimize={() => toggleMinimize(id)}
+            isMaximized={maximizedWindow === id}
+            onToggleMaximize={() => toggleMaximize(id)}
+            onDragStart={() => handleDragStart(id)}
+            onDragOver={(e) => handleDragOver(e, id)}
+            onDrop={(e) => handleDrop(e, id)}
+            onDragEnd={handleDragEnd}
+            isDragging={draggedWindow === id}
+            isDragOver={dragOverWindow === id}
+          >
+            <DataTable
+              columns={queryResult.columns}
+              rows={queryResult.rows}
+              tableName={activeDataset}
+            />
+          </WorkspaceWindow>
+        );
+    }
+  };
+
   const hasActiveTable = Boolean(activeDataset && auraEngine.getTableData(activeDataset).length > 0);
 
   return (
@@ -307,11 +697,15 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
         onSelectDataset={handleSelectDataset}
         onOpenUpload={() => setIsUploadOpen(true)}
         onOpenReport={() => setIsReportOpen(true)}
+        onOpenAgentModal={() => setIsAgentModalOpen(true)}
         onToggleInspector={() => setIsInspectorOpen(!isInspectorOpen)}
         isInspectorOpen={isInspectorOpen}
         onReturnHome={onReturnHome}
         isWebMcpActive={true}
         recentToolCallCount={events.length}
+        onOpenDocs={onOpenDocs}
+        onOpenShare={() => setIsShareOpen(true)}
+        onOpenExportSlide={() => setIsExportSlideOpen(true)}
       />
 
       {/* Main Studio Body */}
@@ -319,11 +713,69 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
         {hasActiveTable ? (
           /* Active Analytics Workspace */
           <main className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 min-w-0">
+            {/* What-If Scenario Forecast Banner */}
+            {scenarioResult && (
+              <div className="p-3.5 bg-brand-50/90 dark:bg-brand-950/80 border border-brand-300 dark:border-brand-500/40 font-mono text-xs space-y-2 animate-fadeIn">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-brand-700 dark:text-brand-300 font-bold">
+                    <Sparkles className="w-4 h-4 text-brand-500" />
+                    <span>Active What-If Scenario: {scenarioResult.description || 'Forecast Simulation'}</span>
+                  </div>
+                  <button
+                    onClick={() => setScenarioResult(null)}
+                    className="text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] pt-1">
+                  {Object.entries(scenarioResult.metrics || {}).map(([col, m]: [string, any]) => (
+                    <div key={col} className="p-2 bg-white dark:bg-dark-900 border border-brand-200 dark:border-brand-500/20">
+                      <div className="text-[10px] text-slate-500 uppercase">{col}</div>
+                      <div className="text-sm font-bold text-slate-900 dark:text-white">
+                        {m.projectedTotal?.toLocaleString()}
+                      </div>
+                      <div className={`text-[10px] font-bold ${m.variancePct >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                        {m.variancePct >= 0 ? '+' : ''}{m.variancePct}% variance
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Statistical Anomaly Detection Alert */}
+            {anomalyReport && anomalyReport.anomaliesFound > 0 && (
+              <div className="p-3.5 bg-amber-50/90 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-500/40 font-mono text-xs space-y-2 animate-fadeIn">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-bold">
+                    <ShieldCheck className="w-4 h-4 text-amber-500" />
+                    <span>Statistical Anomaly Detection: {anomalyReport.anomaliesFound} Outlier(s) in "{anomalyReport.tableName}"</span>
+                  </div>
+                  <button
+                    onClick={() => setAnomalyReport(null)}
+                    className="text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2 text-[11px] pt-1">
+                  {anomalyReport.anomalies.slice(0, 3).map((a: any, idx: number) => (
+                    <span key={idx} className="px-2 py-1 bg-white dark:bg-dark-900 border border-amber-200 dark:border-amber-500/30 text-slate-800 dark:text-slate-200">
+                      <strong>{a.rowIdentifier}</strong>: {a.reason}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Natural Language Query Co-Pilot */}
             <AiCommandBar
               activeDataset={activeDataset}
               onExecutePrompt={handleExecuteAiPrompt}
               isProcessing={isProcessingAi}
+              onOpenAgentConfig={() => setIsAgentModalOpen(true)}
+              agentStatusMessage={agentStatusMessage}
             />
 
             {/* Dynamic Statistical Insights */}
@@ -337,34 +789,124 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
               onClearFilter={handleClearFilter}
             />
 
-            {/* Live KPI Metric Cards */}
-            <MetricCards tableName={activeDataset} />
+            {/* Workspace Layout Manager Toolbar */}
+            <div className="flex flex-wrap items-center justify-between gap-2.5 px-3 py-2 bg-white/80 dark:bg-dark-900/80 backdrop-blur-md border border-slate-200 dark:border-white/[0.08] font-mono text-xs shadow-sm">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 font-bold">
+                  <LayoutGrid className="w-3.5 h-3.5 text-brand-500" />
+                  <span className="uppercase text-[11px] tracking-wider">Split View:</span>
+                </div>
 
-            {/* Interactive Visualizations */}
-            <ChartViewport
-              config={chartConfig}
-              data={queryResult.rows}
-              onTypeChange={handleChartTypeChange}
-              isAgentUpdated={agentUpdated}
-            />
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => applyPreset('equal')}
+                    className={`px-2 py-1 rounded-none border text-[10px] font-medium transition-colors ${
+                      row1Split === 50 && !isStacked
+                        ? 'bg-brand-600 text-white font-bold border-brand-500'
+                        : 'bg-slate-100 dark:bg-dark-850 hover:bg-slate-200 dark:hover:bg-dark-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10'
+                    }`}
+                    title="Equal 50/50: All windows equally divided across screen"
+                  >
+                    Equal 50/50
+                  </button>
+                  <button
+                    onClick={() => applyPreset('wideGraph')}
+                    className={`px-2 py-1 rounded-none border text-[10px] font-medium transition-colors ${
+                      row1Split === 65 && !isStacked
+                        ? 'bg-brand-600 text-white font-bold border-brand-500'
+                        : 'bg-slate-100 dark:bg-dark-850 hover:bg-slate-200 dark:hover:bg-dark-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10'
+                    }`}
+                    title="Wide Graph: 65% Graph + 35% SQL Terminal"
+                  >
+                    Focus Graph (65/35)
+                  </button>
+                  <button
+                    onClick={() => applyPreset('wideSql')}
+                    className={`px-2 py-1 rounded-none border text-[10px] font-medium transition-colors ${
+                      row1Split === 35 && !isStacked
+                        ? 'bg-brand-600 text-white font-bold border-brand-500'
+                        : 'bg-slate-100 dark:bg-dark-850 hover:bg-slate-200 dark:hover:bg-dark-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10'
+                    }`}
+                    title="Focus SQL: 35% Graph + 65% SQL Terminal"
+                  >
+                    Focus SQL (35/65)
+                  </button>
+                  <button
+                    onClick={() => applyPreset('stacked')}
+                    className={`px-2 py-1 rounded-none border text-[10px] font-medium transition-colors ${
+                      isStacked
+                        ? 'bg-brand-600 text-white font-bold border-brand-500'
+                        : 'bg-slate-100 dark:bg-dark-850 hover:bg-slate-200 dark:hover:bg-dark-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10'
+                    }`}
+                    title="Stacked: 100% full width for each window"
+                  >
+                    Full Stacked
+                  </button>
+                </div>
+              </div>
 
-            {/* In-Memory SQL Console */}
-            <SqlConsole
-              activeDataset={activeDataset}
-              currentSql={currentSql}
-              onRunSql={handleRunQuery}
-              executionTimeMs={queryResult.executionTimeMs}
-              rowCount={queryResult.rowCount}
-              isAgentExecuting={agentUpdated}
-              errorMessage={queryResult.error}
-            />
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] text-slate-400 hidden md:inline">
+                  Drag splitters or bottom window edges to resize • Sibling windows auto-balance to 100%
+                </span>
 
-            {/* Live Data Grid */}
-            <DataTable
-              columns={queryResult.columns}
-              rows={queryResult.rows}
-              tableName={activeDataset}
-            />
+                <button
+                  onClick={resetLayout}
+                  className="px-2 py-1 rounded-none bg-slate-100 dark:bg-dark-850 hover:bg-slate-200 dark:hover:bg-dark-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10 text-[10px] flex items-center gap-1 transition-colors"
+                  title="Reset to default 50/50 arrangement"
+                >
+                  <RotateCcw className="w-3 h-3 text-slate-400" />
+                  <span>Reset 50/50</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Modular Dynamic Auto-Adjusting Workspace Grid */}
+            <div ref={workspaceGridRef} className="flex flex-col gap-2 sm:gap-3 w-full min-w-0">
+              {/* Row 1: Default Graph & SQL Terminal */}
+              <div
+                ref={row1Ref}
+                className={`w-full flex ${isStacked ? 'flex-col gap-4' : 'flex-col lg:flex-row'} items-stretch min-w-0`}
+              >
+                {renderWindowContent(slots[0], isStacked ? 100 : row1Split)}
+                {!isStacked && (
+                  <SplitGutter
+                    direction="horizontal"
+                    currentPct={row1Split}
+                    onSplitChange={handleRow1SplitChange}
+                    containerRef={row1Ref}
+                  />
+                )}
+                {renderWindowContent(slots[1], isStacked ? 100 : 100 - row1Split)}
+              </div>
+
+              {/* Horizontal Split Gutter between Row 1 & Row 2 for Downward/Upward Resizing */}
+              {!isStacked && (
+                <SplitGutter
+                  direction="vertical"
+                  currentPct={verticalSplit}
+                  onSplitChange={handleVerticalSplitChange}
+                  containerRef={workspaceGridRef}
+                />
+              )}
+
+              {/* Row 2: Default KPI Stats & Data Grid */}
+              <div
+                ref={row2Ref}
+                className={`w-full flex ${isStacked ? 'flex-col gap-4' : 'flex-col lg:flex-row'} items-stretch min-w-0`}
+              >
+                {renderWindowContent(slots[2], isStacked ? 100 : row2Split)}
+                {!isStacked && (
+                  <SplitGutter
+                    direction="horizontal"
+                    currentPct={row2Split}
+                    onSplitChange={handleRow2SplitChange}
+                    containerRef={row2Ref}
+                  />
+                )}
+                {renderWindowContent(slots[3], isStacked ? 100 : 100 - row2Split)}
+              </div>
+            </div>
           </main>
         ) : (
           /* Zero Preloaded Data - Clean Ingestion Center */
@@ -470,6 +1012,33 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome }
           chartConfig={chartConfig}
         />
       )}
+
+      {/* AI Agent Connection & Provider Modal */}
+      <AgentConnectModal
+        isOpen={isAgentModalOpen}
+        onClose={() => setIsAgentModalOpen(false)}
+        activeDataset={activeDataset}
+      />
+
+      {/* Zero-Server Shareable Link Modal */}
+      <ShareModal
+        isOpen={isShareOpen}
+        onClose={() => setIsShareOpen(false)}
+        activeDataset={activeDataset}
+        currentSql={currentSql}
+        chartConfig={chartConfig}
+        activeFilter={activeFilter}
+      />
+
+      {/* 1-Click Executive PDF Slide Export Modal */}
+      <ExportBriefingModal
+        isOpen={isExportSlideOpen}
+        onClose={() => setIsExportSlideOpen(false)}
+        tableName={activeDataset}
+        chartConfig={chartConfig}
+        currentSql={currentSql}
+        metrics={auraEngine.computeLiveMetrics(activeDataset)}
+      />
     </div>
   );
 };

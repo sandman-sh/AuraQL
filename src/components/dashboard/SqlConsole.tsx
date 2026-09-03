@@ -45,12 +45,12 @@ export const SqlConsole: React.FC<SqlConsoleProps> = ({
 
   return (
     <div
-      className={`glass-card rounded-none p-4 border transition-all duration-200 ${
+      className={`rounded-none p-4 transition-all duration-200 w-full max-w-full overflow-hidden min-w-0 bg-white dark:bg-dark-950 ${
         errorMessage
-          ? 'border-rose-500/60 ring-1 ring-rose-500/30'
+          ? 'ring-1 ring-rose-500/60'
           : isAgentExecuting
-          ? 'border-brand-500 ring-1 ring-brand-500/40 glow-purple-sm'
-          : 'border-slate-200 dark:border-white/[0.08]'
+          ? 'ring-2 ring-brand-500/50 glow-purple-sm'
+          : ''
       }`}
     >
       {/* Console Header */}
@@ -151,6 +151,20 @@ export const SqlConsole: React.FC<SqlConsoleProps> = ({
               {q.title}
             </button>
           ))}
+
+          {/* Multi-Table JOIN Shortcut */}
+          <button
+            onClick={() => {
+              const joinSql = `SELECT o.order_id, o.region, o.revenue, c.quarterly_revenue_m FROM ecommerce_sales o JOIN cloud_software_financials c ON o.region = c.segment LIMIT 10;`;
+              setEditorSql(joinSql);
+              onRunSql(joinSql);
+            }}
+            className="px-2 py-0.5 text-[10px] font-mono bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/60 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-500/40 transition-colors rounded-none font-bold flex items-center gap-1"
+            title="Execute real in-memory multi-table SQL JOIN"
+          >
+            <Zap className="w-2.5 h-2.5 text-purple-500" />
+            <span>Multi-Table JOIN Demo</span>
+          </button>
         </div>
       )}
     </div>
