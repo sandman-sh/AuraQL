@@ -6,7 +6,7 @@ import { SqlConsole } from './SqlConsole';
 import { DataTable } from './DataTable';
 import { WebMcpInspector } from './WebMcpInspector';
 import { UploadModal } from '../modals/UploadModal';
-import { DatasetSelectorModal } from '../modals/DatasetSelectorModal';
+import { DemoDatasetModal } from '../modals/DemoDatasetModal';
 import { ExecutiveReportModal } from '../modals/ExecutiveReportModal';
 import { AgentConnectModal } from '../modals/AgentConnectModal';
 import { ShareModal } from '../modals/ShareModal';
@@ -49,7 +49,9 @@ interface StudioWorkspaceProps {
 export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome, onOpenDocs }) => {
   const initialTables = auraEngine.getTableNames();
   const [activeDataset, setActiveDataset] = useState<string>(initialTables[0] || '');
-  const [isDatasetSelectorOpen, setIsDatasetSelectorOpen] = useState<boolean>(initialTables.length === 0);
+  const [isDemoModalOpen, setIsDemoModalOpen] = useState<boolean>(false);
+  const [isDragOverScreen, setIsDragOverScreen] = useState<boolean>(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isInspectorOpen, setIsInspectorOpen] = useState<boolean>(false);
   const [isUploadOpen, setIsUploadOpen] = useState<boolean>(false);
   const [isReportOpen, setIsReportOpen] = useState<boolean>(false);
@@ -330,7 +332,7 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome, 
     const safeName = (tableName || '').toLowerCase().replace(/[^a-z0-9_]/g, '_');
     setActiveDataset(safeName);
     setIsUploadOpen(false);
-    setIsDatasetSelectorOpen(false);
+    setIsDemoModalOpen(false);
     const customSql = `SELECT * FROM ${safeName} LIMIT 50;`;
     setCurrentSql(customSql);
     handleRunQuery(customSql);
@@ -357,7 +359,104 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome, 
   const handleLoadSampleData = (sampleKey: string = 'ecommerce_sales') => {
     auraEngine.loadPreloadedDataset(sampleKey);
     handleSelectDataset(sampleKey);
-    setIsDatasetSelectorOpen(false);
+    setIsDemoModalOpen(false);
+  };
+
+  // Direct multi-format file parser (CSV, TSV, TXT, JSON, JSONL) with zero intermediate modal
+  const handleDirectFileUpload = async (file: File) => {
+    if (!file) return;
+    try {
+      const text = await file.text();
+      if (!text || !text.trim()) {
+        alert('Selected file is empty.');
+        return;
+      }
+
+      const tableName = file.name
+        .replace(/\.[^/.]+$/, '')
+        .replace(/[^a-zA-Z0-9_]/g, '_')
+        .toLowerCase() || 'custom_table';
+
+      let rows: Record<string, any>[] = [];
+
+      if (file.name.endsWith('.json')) {
+        const parsed = JSON.parse(text);
+        rows = Array.isArray(parsed) ? parsed : [parsed];
+      } else if (file.name.endsWith('.jsonl') || file.name.endsWith('.ndjson')) {
+        rows = text
+          .split(/\r?\n/)
+          .filter((line) => line.trim())
+          .map((line) => JSON.parse(line));
+      } else {
+        // Delimited formats: CSV, TSV, Semicolon
+        const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+        if (lines.length < 2) {
+          alert('File must contain at least a header row and one data row.');
+          return;
+        }
+
+        const firstLine = lines[0];
+        let delim = ',';
+        if (firstLine.includes('\t')) delim = '\t';
+        else if (firstLine.includes(';') && !firstLine.includes(',')) delim = ';';
+
+        const parseLine = (line: string): string[] => {
+          if (delim === '\t') return line.split('\t').map((s) => s.trim().replace(/^"|"$/g, ''));
+          const result: string[] = [];
+          let current = '';
+          let inQuotes = false;
+          for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            if (char === '"') inQuotes = !inQuotes;
+            else if (char === delim && !inQuotes) {
+              result.push(current.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
+              current = '';
+            } else {
+              current += char;
+            }
+          }
+          result.push(current.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
+          return result;
+        };
+
+        const rawHeaders = parseLine(lines[0]);
+        const headers = rawHeaders.map(
+          (h, i) => h.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase() || `col_${i + 1}`
+        );
+
+        for (let i = 1; i < lines.length; i++) {
+          const values = parseLine(lines[i]);
+          if (values.length === 0 || (values.length === 1 && values[0] === '')) continue;
+          const rowObj: Record<string, any> = {};
+          headers.forEach((h, idx) => {
+            const rawVal = values[idx] ?? '';
+            if (rawVal === '') rowObj[h] = null;
+            else if (!isNaN(Number(rawVal)) && rawVal.trim() !== '') rowObj[h] = Number(rawVal);
+            else if (rawVal.toLowerCase() === 'true') rowObj[h] = true;
+            else if (rawVal.toLowerCase() === 'false') rowObj[h] = false;
+            else rowObj[h] = rawVal;
+          });
+          rows.push(rowObj);
+        }
+      }
+
+      if (rows.length === 0) {
+        alert('No data rows found in file.');
+        return;
+      }
+
+      auraEngine.registerCustomTable(tableName, rows, true);
+      handleCustomDatasetImported(tableName, rows.length);
+    } catch (err: any) {
+      alert(`Failed to parse file: ${err.message}`);
+    }
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      handleDirectFileUpload(e.target.files[0]);
+    }
+    e.target.value = '';
   };
 
   // Layout Persistence Helper
@@ -688,7 +787,8 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome, 
       <Header
         activeDataset={activeDataset}
         onSelectDataset={handleSelectDataset}
-        onOpenUpload={() => setIsUploadOpen(true)}
+        onOpenUpload={() => fileInputRef.current?.click()}
+        onOpenDemoModal={() => setIsDemoModalOpen(true)}
         onOpenReport={() => setIsReportOpen(true)}
         onOpenAgentModal={() => setIsAgentModalOpen(true)}
         onToggleInspector={() => setIsInspectorOpen(!isInspectorOpen)}
@@ -697,7 +797,6 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome, 
         isWebMcpActive={true}
         recentToolCallCount={events.length}
         onOpenDocs={onOpenDocs}
-        onOpenDatasetSelector={() => setIsDatasetSelectorOpen(true)}
         onOpenShare={() => setIsShareOpen(true)}
         onOpenExportSlide={() => setIsExportSlideOpen(true)}
       />
@@ -904,11 +1003,39 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome, 
           </main>
         ) : (
           /* Zero Preloaded Data - Clean Ingestion Center */
-          <main className="flex-1 overflow-y-auto p-6 sm:p-12 flex flex-col items-center justify-center min-w-0">
+          <main
+            className={`flex-1 overflow-y-auto p-6 sm:p-12 flex flex-col items-center justify-center min-w-0 transition-colors ${
+              isDragOverScreen
+                ? 'bg-brand-500/10 border-2 border-dashed border-brand-500'
+                : ''
+            }`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsDragOverScreen(true);
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsDragOverScreen(false);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsDragOverScreen(false);
+              if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                handleDirectFileUpload(e.dataTransfer.files[0]);
+              }
+            }}
+          >
             <div className="max-w-xl w-full text-center space-y-6">
               {/* Icon & Title */}
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-none bg-brand-50 dark:bg-brand-950 border border-brand-200 dark:border-brand-500/40 text-brand-600 dark:text-brand-400 mx-auto shadow-sm">
-                <Database className="w-8 h-8" />
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="cursor-pointer group inline-flex items-center justify-center w-16 h-16 rounded-none bg-brand-50 dark:bg-brand-950 border border-brand-200 dark:border-brand-500/40 text-brand-600 dark:text-brand-400 mx-auto shadow-sm hover:border-brand-500 hover:scale-105 transition-all"
+                title="Click to directly select and upload file"
+              >
+                <Database className="w-8 h-8 group-hover:text-brand-500 transition-colors" />
               </div>
 
               <div>
@@ -919,26 +1046,42 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome, 
                   No Preloaded Datasets Active
                 </h2>
                 <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 font-sans leading-relaxed max-w-md mx-auto">
-                  Aura Analytics operates with zero mock or preloaded data. Ingest your raw CSV or JSON to initialize the in-memory AuraQL columnar engine and activate live WebMCP tools for AI agents.
+                  Aura Analytics operates with zero mock or preloaded data. Ingest your raw data directly or load our pre-configured demo datasets to test sub-10ms SQL execution and live WebMCP AI tools.
                 </p>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+              {/* Direct Drag & Drop Dropzone Box */}
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="p-6 border-2 border-dashed border-slate-300 dark:border-white/20 hover:border-brand-500 dark:hover:border-brand-400 bg-white/60 dark:bg-dark-900/60 hover:bg-brand-50/40 dark:hover:bg-brand-950/20 cursor-pointer transition-all flex flex-col items-center justify-center gap-2 group"
+              >
+                <Upload className="w-6 h-6 text-slate-400 group-hover:text-brand-500 group-hover:-translate-y-0.5 transition-all" />
+                <div className="font-mono text-xs font-semibold text-slate-800 dark:text-slate-200">
+                  Drag & drop your dataset here, or <span className="text-brand-600 dark:text-brand-400 underline underline-offset-2">browse files</span>
+                </div>
+                <div className="text-[11px] text-slate-400 font-mono">
+                  Direct support: .csv, .json, .tsv, .txt, .jsonl
+                </div>
+              </div>
+
+              {/* Main Screen Direct 2 Buttons */}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-1">
                 <button
-                  onClick={() => setIsDatasetSelectorOpen(true)}
-                  className="w-full sm:w-auto btn-sharp px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-mono text-xs font-bold flex items-center justify-center gap-2 shadow-md shadow-brand-600/30 transition-all border border-brand-400/40"
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full sm:w-auto btn-sharp px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-mono text-xs font-bold flex items-center justify-center gap-2 shadow-md shadow-brand-600/30 transition-all border border-brand-400/40 cursor-pointer"
                 >
                   <Upload className="w-4 h-4" />
-                  <span>Upload Your Own Dataset (.csv, .json)</span>
+                  <span>Upload Dataset (.csv, .json, .tsv)</span>
                 </button>
 
                 <button
-                  onClick={() => setIsDatasetSelectorOpen(true)}
-                  className="w-full sm:w-auto btn-sharp px-5 py-2.5 bg-white dark:bg-dark-900 hover:bg-slate-100 dark:hover:bg-dark-850 text-slate-800 dark:text-slate-200 font-mono text-xs font-semibold flex items-center justify-center gap-2 border border-slate-300 dark:border-white/10 hover:border-brand-500/40 transition-colors shadow-sm"
+                  type="button"
+                  onClick={() => setIsDemoModalOpen(true)}
+                  className="w-full sm:w-auto btn-sharp px-5 py-2.5 bg-white dark:bg-dark-900 hover:bg-slate-100 dark:hover:bg-dark-850 text-slate-800 dark:text-slate-200 font-mono text-xs font-semibold flex items-center justify-center gap-2 border border-slate-300 dark:border-white/10 hover:border-brand-500/40 transition-colors shadow-sm cursor-pointer"
                 >
                   <Sparkles className="w-4 h-4 text-brand-600 dark:text-brand-400" />
-                  <span>Load Demo Datasets to Test</span>
+                  <span>Load Demo Dataset</span>
                 </button>
               </div>
 
@@ -989,12 +1132,20 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome, 
         )}
       </div>
 
-      {/* Dataset Selection & Onboarding Modal */}
-      <DatasetSelectorModal
-        isOpen={isDatasetSelectorOpen}
-        onClose={() => setIsDatasetSelectorOpen(false)}
+      {/* Hidden Native File Input for Instant Multi-Format Ingestion */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv,.json,.tsv,.txt,.jsonl,.ndjson"
+        className="hidden"
+        onChange={handleFileInputChange}
+      />
+
+      {/* Demo Dataset Selector Modal (Only opens when user clicks 'Load Demo Dataset') */}
+      <DemoDatasetModal
+        isOpen={isDemoModalOpen}
+        onClose={() => setIsDemoModalOpen(false)}
         onSelectDataset={handleLoadSampleData}
-        canClose={true}
       />
 
       {/* CSV / JSON Upload Modal */}
