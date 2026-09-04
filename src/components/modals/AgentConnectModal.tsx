@@ -96,7 +96,8 @@ export const AgentConnectModal: React.FC<AgentConnectModalProps> = ({
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  const bridgeUrl = webMcp.getBridgeUrl();
+  const [bridgeTarget, setBridgeTarget] = useState<'cloud' | 'local'>('cloud');
+  const activeTargetUrl = bridgeTarget === 'cloud' ? 'https://auraql.onrender.com' : 'http://localhost:3001';
 
   // Real ChatGPT Desktop configuration
   const chatGptDesktopConfig = `{
@@ -114,17 +115,19 @@ export const AgentConnectModal: React.FC<AgentConnectModalProps> = ({
   const chatGptSseConfig = `{
   "mcpServers": {
     "auraql": {
-      "url": "${bridgeUrl}/sse"
+      "url": "${activeTargetUrl}/sse"
     }
   }
 }`;
 
-  const codexCliCmd = `codex mcp add auraql node scripts/mcp-bridge.mjs --stdio`;
+  const codexCliCmd = bridgeTarget === 'cloud' 
+    ? `codex mcp add auraql https://auraql.onrender.com/sse`
+    : `codex mcp add auraql node scripts/mcp-bridge.mjs --stdio`;
 
   const pythonSnippet = `import requests
 
 # 1. Connect to live WebMCP Bridge
-BRIDGE_URL = "${bridgeUrl}/api/mcp"
+BRIDGE_URL = "${activeTargetUrl}/api/mcp"
 
 # 2. ChatGPT / Agent executes SQL query in browser AuraQL memory
 res = requests.post(BRIDGE_URL, json={
@@ -247,11 +250,73 @@ requests.post(BRIDGE_URL, json={
                 </p>
               </div>
 
-              {/* Step 1: Config Stdio */}
+              {/* Environment Toggle */}
+              <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-slate-100 dark:bg-dark-900 border border-slate-200 dark:border-white/10 text-xs">
+                <span className="font-semibold text-slate-700 dark:text-slate-300 font-sans">
+                  Active Bridge Server:
+                </span>
+                <div className="flex items-center gap-1.5 bg-slate-200 dark:bg-dark-800 p-1 rounded">
+                  <button
+                    type="button"
+                    onClick={() => setBridgeTarget('cloud')}
+                    className={`px-2.5 py-1 text-[11px] rounded transition-all font-mono ${
+                      bridgeTarget === 'cloud'
+                        ? 'bg-brand-600 text-white font-bold shadow-sm'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    ☁️ Cloud Render (auraql.onrender.com)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBridgeTarget('local')}
+                    className={`px-2.5 py-1 text-[11px] rounded transition-all font-mono ${
+                      bridgeTarget === 'local'
+                        ? 'bg-brand-600 text-white font-bold shadow-sm'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    💻 Localhost (localhost:3001)
+                  </button>
+                </div>
+              </div>
+
+              {/* Method 1: Remote SSE (Recommended) */}
+              <div className="border border-brand-300 dark:border-brand-500/40 bg-brand-50/40 dark:bg-dark-900 p-3.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-brand-700 dark:text-brand-400 flex items-center gap-1.5 text-xs">
+                    <Zap className="w-3.5 h-3.5" />
+                    <span>Method 1 (Recommended): Remote HTTP SSE Endpoint</span>
+                  </span>
+                  <button
+                    onClick={() => handleCopy(chatGptSseConfig, 'desktop_sse')}
+                    className="flex items-center gap-1 text-[11px] bg-brand-600 hover:bg-brand-500 text-white px-2.5 py-1 rounded transition-colors font-sans"
+                  >
+                    {copiedKey === 'desktop_sse' ? <Check className="w-3 h-3 text-white" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedKey === 'desktop_sse' ? 'Copied' : 'Copy JSON'}</span>
+                  </button>
+                </div>
+                
+                <div className="text-[11px] text-slate-600 dark:text-slate-400 font-sans space-y-1">
+                  <p>Paste this config into your desktop AI app configuration file (no local code installation required):</p>
+                  <ul className="list-disc pl-4 text-[10px] font-mono space-y-0.5 text-slate-500 dark:text-slate-400">
+                    <li><strong>Claude Desktop (Windows):</strong> <code>%APPDATA%\Claude\claude_desktop_config.json</code></li>
+                    <li><strong>Claude Desktop (macOS):</strong> <code>~/Library/Application Support/Claude/claude_desktop_config.json</code></li>
+                    <li><strong>ChatGPT Desktop (Windows):</strong> <code>%APPDATA%\OpenAI\ChatGPT\mcp.json</code></li>
+                    <li><strong>ChatGPT Desktop (macOS):</strong> <code>~/Library/Application Support/OpenAI/ChatGPT/mcp.json</code></li>
+                  </ul>
+                </div>
+
+                <pre className="p-2.5 bg-slate-950 text-emerald-400 text-[11px] overflow-x-auto rounded border border-slate-800 font-mono">
+                  {chatGptSseConfig}
+                </pre>
+              </div>
+
+              {/* Method 2: Stdio */}
               <div className="border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-dark-900 p-3">
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                    <span>Method A: Stdio Configuration (ChatGPT Desktop & Claude Desktop)</span>
+                    <span>Method 2: Local Stdio Transport (Offline / Local Dev)</span>
                   </span>
                   <button
                     onClick={() => handleCopy(chatGptDesktopConfig, 'desktop_stdio')}
@@ -262,40 +327,18 @@ requests.post(BRIDGE_URL, json={
                   </button>
                 </div>
                 <p className="text-[10px] text-slate-500 dark:text-slate-400 font-sans mb-1.5">
-                  Paste into <code>%APPDATA%\OpenAI\ChatGPT\mcp.json</code> (or Claude Desktop configuration):
+                  For running directly from your cloned local repository:
                 </p>
-                <pre className="p-2.5 bg-slate-950 text-slate-300 text-[10px] overflow-x-auto">
+                <pre className="p-2.5 bg-slate-950 text-slate-300 text-[10px] overflow-x-auto rounded border border-slate-800">
                   {chatGptDesktopConfig}
                 </pre>
               </div>
 
-              {/* Step 2: Config SSE */}
+              {/* Method 3: Codex CLI */}
               <div className="border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-dark-900 p-3">
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                    <span>Method B: SSE Endpoint (Zero Stdio / Remote MCP)</span>
-                  </span>
-                  <button
-                    onClick={() => handleCopy(chatGptSseConfig, 'desktop_sse')}
-                    className="flex items-center gap-1 text-[11px] text-brand-600 dark:text-brand-400 hover:underline"
-                  >
-                    {copiedKey === 'desktop_sse' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                    <span>{copiedKey === 'desktop_sse' ? 'Copied' : 'Copy JSON'}</span>
-                  </button>
-                </div>
-                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-sans mb-1.5">
-                  Connect ChatGPT directly to the active bridge server via HTTP SSE:
-                </p>
-                <pre className="p-2.5 bg-slate-950 text-emerald-400 text-[10px] overflow-x-auto">
-                  {chatGptSseConfig}
-                </pre>
-              </div>
-
-              {/* Step 3: Codex CLI */}
-              <div className="border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-dark-900 p-3">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                    <span>Method C: OpenAI Codex CLI Command</span>
+                    <span>Method 3: OpenAI Codex CLI Command</span>
                   </span>
                   <button
                     onClick={() => handleCopy(codexCliCmd, 'codex_cli')}
@@ -305,7 +348,7 @@ requests.post(BRIDGE_URL, json={
                     <span>{copiedKey === 'codex_cli' ? 'Copied' : 'Copy Command'}</span>
                   </button>
                 </div>
-                <div className="p-2.5 bg-slate-950 text-emerald-400 text-[10px] overflow-x-auto">
+                <div className="p-2.5 bg-slate-950 text-emerald-400 text-[10px] overflow-x-auto rounded border border-slate-800 font-mono">
                   <code>{codexCliCmd}</code>
                 </div>
               </div>
@@ -490,7 +533,16 @@ requests.post(BRIDGE_URL, json={
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 font-sans mt-1">
-                    Serving Stdio & SSE via <span className="font-mono text-brand-600 dark:text-brand-400 font-medium">{bridgeUrl}</span>
+                    Serving Stdio & SSE via <span className="font-mono text-brand-600 dark:text-brand-400 font-medium">{activeTargetUrl}</span>
+                    <a
+                      href={`${activeTargetUrl}/health`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-brand-600 dark:text-brand-400 hover:underline inline-flex items-center gap-0.5 ml-2 text-[10px]"
+                    >
+                      <span>Check Health</span>
+                      <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
                   </p>
                 </div>
 
