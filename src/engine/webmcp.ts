@@ -64,6 +64,24 @@ class WebMcpManager {
     return 'http://localhost:3001';
   }
 
+  public static getOrCreateSessionId(): string {
+    if (typeof window === 'undefined') return 'default';
+    try {
+      let sid = localStorage.getItem('auraql_session_id');
+      if (!sid || !sid.startsWith('aura_')) {
+        sid = 'aura_' + Math.random().toString(36).substring(2, 9);
+        localStorage.setItem('auraql_session_id', sid);
+      }
+      return sid;
+    } catch {
+      return 'default';
+    }
+  }
+
+  public getSessionId(): string {
+    return WebMcpManager.getOrCreateSessionId();
+  }
+
   public getBridgeUrl(): string {
     return this.activeBridgeUrl || WebMcpManager.getDefaultBridgeUrl();
   }
@@ -79,7 +97,8 @@ class WebMcpManager {
     }
 
     try {
-      const sse = new EventSource(`${bridgeUrl}/api/bridge/events`);
+      const sessionId = WebMcpManager.getOrCreateSessionId();
+      const sse = new EventSource(`${bridgeUrl}/api/bridge/events?session=${sessionId}`);
       this.bridgeEventSource = sse;
 
       sse.onopen = () => {

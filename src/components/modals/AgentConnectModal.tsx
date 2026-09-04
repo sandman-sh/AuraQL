@@ -96,6 +96,8 @@ export const AgentConnectModal: React.FC<AgentConnectModalProps> = ({
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
+  const userSessionId = typeof window !== 'undefined' ? webMcp.getSessionId() : 'default';
+
   // Real ChatGPT Desktop configuration
   const chatGptDesktopConfig = `{
   "mcpServers": {
@@ -112,19 +114,19 @@ export const AgentConnectModal: React.FC<AgentConnectModalProps> = ({
   const chatGptSseConfig = `{
   "mcpServers": {
     "auraql": {
-      "url": "${activeTargetUrl}/sse"
+      "url": "${activeTargetUrl}/sse?session=${userSessionId}"
     }
   }
 }`;
 
   const codexCliCmd = bridgeTarget === 'cloud' 
-    ? `codex mcp add auraql https://auraql.onrender.com/sse`
+    ? `codex mcp add auraql "${activeTargetUrl}/sse?session=${userSessionId}"`
     : `codex mcp add auraql node scripts/mcp-bridge.mjs --stdio`;
 
   const pythonSnippet = `import requests
 
-# 1. Connect to live WebMCP Bridge
-BRIDGE_URL = "${activeTargetUrl}/api/mcp"
+# 1. Connect to live WebMCP Bridge (Session Isolated)
+BRIDGE_URL = "${activeTargetUrl}/api/mcp?session=${userSessionId}"
 
 # 2. Execute analytical SQL in local AuraQL browser memory
 res = requests.post(BRIDGE_URL, json={
@@ -247,7 +249,7 @@ requests.post(BRIDGE_URL, json={
                   <span>Desktop ChatGPT & Claude Integration</span>
                 </div>
                 <p className="text-[11px] font-sans text-slate-600 dark:text-slate-400">
-                  ChatGPT and Claude Desktop inspect browser memory via the <strong>Model Context Protocol (MCP)</strong>, executing SQL and rendering interactive charts live on screen.
+                  ChatGPT, Claude Desktop, and Codex inspect browser memory via <strong>Model Context Protocol (MCP)</strong>. Each tab uses an isolated Session Token (<code className="font-mono text-[10px] text-brand-600 dark:text-brand-400 font-semibold">{userSessionId}</code>), ensuring multiple simultaneous users never conflict.
                 </p>
               </div>
 
@@ -278,8 +280,10 @@ requests.post(BRIDGE_URL, json={
                   </button>
                 </div>
 
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-slate-400 hidden sm:inline">Target:</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 bg-brand-50 text-brand-700 dark:bg-brand-950/80 dark:text-brand-300 border border-brand-200 dark:border-brand-500/30" title="Dedicated session token for this browser tab">
+                    Session: {userSessionId}
+                  </span>
                   <button
                     type="button"
                     onClick={() => setBridgeTarget(bridgeTarget === 'cloud' ? 'local' : 'cloud')}

@@ -167,9 +167,11 @@ const TOOLS_SPEC = [
 
 // Active Browser Clients connected via SSE
 const browserClients = new Set();
+// Multi-tenant session map: session -> Set of browser SSE response streams
+const browserClientsBySession = new Map();
 // Pending tool call promises: id -> { resolve, reject, timeout }
 const pendingRequests = new Map();
-// Active MCP SSE Client Sessions: sessionId -> res
+// Active MCP SSE Client Sessions: sessionId -> { res, userSession }
 const mcpSessions = new Map();
 
 // Periodic keep-alive ping to prevent cloud load balancers (e.g. Render 55s idle timeout) from closing SSE streams
@@ -181,9 +183,10 @@ setInterval(() => {
       browserClients.delete(client);
     }
   }
-  for (const [id, res] of mcpSessions) {
+  for (const [id, sessionObj] of mcpSessions) {
     try {
-      res.write(': keepalive\n\n');
+      const clientRes = sessionObj.res || sessionObj;
+      clientRes.write(': keepalive\n\n');
     } catch {
       mcpSessions.delete(id);
     }
@@ -192,16 +195,25 @@ setInterval(() => {
 
 /**
  * Dispatches a tool call to the connected browser tab
+ * Routes strictly to targetSession if provided, ensuring multi-user isolation
  */
-function callToolInBrowser(toolName, args, timeoutMs = 15000) {
+function callToolInBrowser(toolName, args, targetSession = null, timeoutMs = 15000) {
   return new Promise(async (resolve, reject) => {
-    if (browserClients.size === 0) {
+    // Select target browser tabs: prioritize exact session match
+    let targets = [];
+    if (targetSession && browserClientsBySession.has(targetSession) && browserClientsBySession.get(targetSession).size > 0) {
+      targets = Array.from(browserClientsBySession.get(targetSession));
+    } else {
+      targets = Array.from(browserClients);
+    }
+
+    if (targets.length === 0) {
       // Check if an active bridge server is running on port 3001 and forward to it
       try {
         const forwardRes = await fetch(`http://localhost:${PORT}/api/mcp`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tool: toolName, args: args || {} })
+          body: JSON.stringify({ tool: toolName, args: args || {}, session: targetSession })
         });
         if (forwardRes.ok) {
           const json = await forwardRes.json();
@@ -219,7 +231,7 @@ function callToolInBrowser(toolName, args, timeoutMs = 15000) {
         content: [
           {
             type: 'text',
-            text: `[WebMCP Bridge Warning] No active Aura Analytics browser tab is connected to http://localhost:${PORT}.\nPlease open http://localhost:5173 in your browser to execute live WebMCP tools.`
+            text: `[WebMCP Bridge Warning] No active Aura Analytics browser tab matching session "${targetSession || 'any'}" is connected to http://localhost:${PORT}.\nPlease open http://localhost:5173 or the web app in your browser to execute live WebMCP tools.`
           }
         ]
       });
@@ -241,8 +253,8 @@ function callToolInBrowser(toolName, args, timeoutMs = 15000) {
 
     pendingRequests.set(id, { resolve, reject, timeout });
 
-    // Broadcast to all active browser tabs
-    for (const client of browserClients) {
+    // Send strictly to targeted browser tabs
+    for (const client of targets) {
       try {
         client.write(`data: ${payload}\n\n`);
       } catch (err) {
@@ -255,7 +267,7 @@ function callToolInBrowser(toolName, args, timeoutMs = 15000) {
 /**
  * Process standard MCP JSON-RPC 2.0 messages
  */
-async function handleMcpJsonRpc(msg) {
+async function handleMcpJsonRpc(msg, userSession = null) {
   const { id, method, params } = msg;
 
   if (method === 'initialize') {
@@ -304,7 +316,7 @@ async function handleMcpJsonRpc(msg) {
   if (method === 'tools/call') {
     const { name, arguments: args } = params || {};
     try {
-      const res = await callToolInBrowser(name, args);
+      const res = await callToolInBrowser(name, args, userSession);
       return {
         jsonrpc: '2.0',
         id,
@@ -392,23 +404,24 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Official MCP SSE Transport endpoint (for Desktop ChatGPT SSE / Claude Desktop SSE)
+  // Official MCP SSE Transport endpoint (for Desktop ChatGPT SSE / Claude Desktop SSE / Codex)
   if (url.pathname === '/sse') {
     const sessionId = crypto.randomUUID();
+    const userSession = url.searchParams.get('session') || null;
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive'
     });
 
-    mcpSessions.set(sessionId, res);
+    mcpSessions.set(sessionId, { res, userSession });
     // Send endpoint notification per official MCP SSE specification
-    res.write(`event: endpoint\ndata: /message?sessionId=${sessionId}\n\n`);
-    log(`Desktop ChatGPT / MCP Client connected via SSE (Session: ${sessionId})`);
+    res.write(`event: endpoint\ndata: /message?sessionId=${sessionId}${userSession ? `&session=${userSession}` : ''}\n\n`);
+    log(`Desktop ChatGPT / Codex Client connected via SSE (Session: ${sessionId}, UserSession: ${userSession || 'all'})`);
 
     req.on('close', () => {
       mcpSessions.delete(sessionId);
-      log(`Desktop ChatGPT / MCP Client disconnected (Session: ${sessionId})`);
+      log(`Desktop ChatGPT / Codex Client disconnected (Session: ${sessionId})`);
     });
     return;
   }
@@ -416,14 +429,16 @@ const server = http.createServer(async (req, res) => {
   // Official MCP SSE message receiver
   if (url.pathname === '/message' && req.method === 'POST') {
     const sessionId = url.searchParams.get('sessionId');
-    const sseClient = sessionId ? mcpSessions.get(sessionId) : null;
+    const sessionEntry = sessionId ? mcpSessions.get(sessionId) : null;
+    const sseClient = sessionEntry ? (sessionEntry.res || sessionEntry) : null;
+    const userSession = sessionEntry?.userSession || url.searchParams.get('session') || null;
 
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', async () => {
       try {
         const jsonRpcMsg = JSON.parse(body);
-        const response = await handleMcpJsonRpc(jsonRpcMsg);
+        const response = await handleMcpJsonRpc(jsonRpcMsg, userSession);
 
         if (response) {
           if (sseClient) {
@@ -445,6 +460,7 @@ const server = http.createServer(async (req, res) => {
 
   // Browser Tab Bridge SSE Stream
   if (url.pathname === '/api/bridge/events') {
+    const session = url.searchParams.get('session') || 'default';
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -452,12 +468,22 @@ const server = http.createServer(async (req, res) => {
     });
 
     browserClients.add(res);
-    res.write(`data: ${JSON.stringify({ type: 'CONNECTED', timestamp: Date.now() })}\n\n`);
-    log(`Browser tab connected (Total active tabs: ${browserClients.size})`);
+    if (!browserClientsBySession.has(session)) {
+      browserClientsBySession.set(session, new Set());
+    }
+    browserClientsBySession.get(session).add(res);
+
+    res.write(`data: ${JSON.stringify({ type: 'CONNECTED', session, timestamp: Date.now() })}\n\n`);
+    log(`Browser tab connected (Session: ${session}, Total active tabs: ${browserClients.size})`);
 
     req.on('close', () => {
       browserClients.delete(res);
-      log(`Browser tab disconnected (Remaining tabs: ${browserClients.size})`);
+      const sessGroup = browserClientsBySession.get(session);
+      if (sessGroup) {
+        sessGroup.delete(res);
+        if (sessGroup.size === 0) browserClientsBySession.delete(session);
+      }
+      log(`Browser tab disconnected (Session: ${session}, Remaining tabs: ${browserClients.size})`);
     });
     return;
   }
@@ -504,7 +530,8 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        const result = await callToolInBrowser(toolName, toolArgs);
+        const toolSession = json.session || url.searchParams.get('session') || null;
+        const result = await callToolInBrowser(toolName, toolArgs, toolSession);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
           success: !result.isError,
