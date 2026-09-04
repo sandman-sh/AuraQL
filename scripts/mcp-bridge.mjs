@@ -406,10 +406,46 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Official MCP SSE Transport endpoint (for Desktop ChatGPT SSE / Claude Desktop SSE / Codex)
+  // Official MCP SSE + Streamable HTTP Transport endpoint
+  // GET  /sse → Legacy SSE transport (ChatGPT Desktop, Claude Desktop)
+  // POST /sse → Streamable HTTP transport (Codex Desktop)
   if (url.pathname === '/sse') {
-    const sessionId = crypto.randomUUID();
     const userSession = url.searchParams.get('session') || null;
+
+    // ── Streamable HTTP: POST with JSON-RPC body ──
+    if (req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', async () => {
+        try {
+          const jsonRpcMsg = JSON.parse(body);
+          const response = await handleMcpJsonRpc(jsonRpcMsg, userSession);
+
+          if (response) {
+            // Respond as SSE stream (Codex expects text/event-stream for POST)
+            res.writeHead(200, {
+              'Content-Type': 'text/event-stream',
+              'Cache-Control': 'no-cache',
+              'Connection': 'keep-alive'
+            });
+            res.write(`event: message\ndata: ${JSON.stringify(response)}\n\n`);
+            res.end();
+            log(`Streamable HTTP: Processed ${jsonRpcMsg.method} (id: ${jsonRpcMsg.id}, session: ${userSession || 'all'})`);
+          } else {
+            // Notifications (no response needed)
+            res.writeHead(204);
+            res.end();
+          }
+        } catch (err) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err.message }));
+        }
+      });
+      return;
+    }
+
+    // ── Legacy SSE: GET opens a persistent stream ──
+    const sessionId = crypto.randomUUID();
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -419,11 +455,11 @@ const server = http.createServer(async (req, res) => {
     mcpSessions.set(sessionId, { res, userSession });
     // Send endpoint notification per official MCP SSE specification
     res.write(`event: endpoint\ndata: /message?sessionId=${sessionId}${userSession ? `&session=${userSession}` : ''}\n\n`);
-    log(`Desktop ChatGPT / Codex Client connected via SSE (Session: ${sessionId}, UserSession: ${userSession || 'all'})`);
+    log(`Legacy SSE: Client connected (Session: ${sessionId}, UserSession: ${userSession || 'all'})`);
 
     req.on('close', () => {
       mcpSessions.delete(sessionId);
-      log(`Desktop ChatGPT / Codex Client disconnected (Session: ${sessionId})`);
+      log(`Legacy SSE: Client disconnected (Session: ${sessionId})`);
     });
     return;
   }
