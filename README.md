@@ -250,15 +250,24 @@ AuraQL boots with sample datasets for instant exploration:
 
 ---
 
-## 🌐 Production Cloud Deployment (Vercel)
+## 🌐 Production Cloud Deployment
 
+### 1. Studio Frontend (Vercel)
 Because AuraQL's columnar database engine runs 100% client-side:
 * **Deploy to Vercel, Netlify, or Cloudflare Pages in 1 click**.
-* **Zero backend database or cloud servers required**.
-* Configuration is pre-optimized with [vercel.json](file:///d:/project/mcp/vercel.json) for Single Page App routing and strict security headers:
+* **Zero backend database required**.
+* Pre-optimized with [vercel.json](file:///d:/project/mcp/vercel.json) for SPA routing and strict security headers:
   ```bash
   npm run build    # Produces optimized bundle in dist/
   ```
+
+### 2. External WebMCP Bridge (Render)
+To expose persistent Remote MCP SSE (`/sse`) and REST (`/api/mcp`) endpoints for Claude Desktop, ChatGPT Desktop, and external agents:
+* Includes [render.yaml](file:///d:/project/mcp/render.yaml) blueprint for 1-click **Render Web Service** deployment.
+* **Build Command**: `npm install`
+* **Start Command**: `node scripts/mcp-bridge.mjs`
+* **Health Check**: `/health`
+* Set `VITE_BRIDGE_URL` in Vercel to connect your frontend with your Render bridge URL (`https://your-service.onrender.com`).
 
 ---
 

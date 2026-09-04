@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: auraql-webmcp-bridge
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node scripts/mcp-bridge.mjs
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 18.20.0

@@ -52,7 +52,7 @@ class WebMcpManager {
     });
   }
 
-  public connectBridgeServer(bridgeUrl: string = 'http://localhost:3001') {
+  public connectBridgeServer(bridgeUrl: string = ((import.meta as any).env?.VITE_BRIDGE_URL as string) || 'http://localhost:3001') {
     if (typeof window === 'undefined') return;
     if (this.bridgeEventSource) {
       try {
