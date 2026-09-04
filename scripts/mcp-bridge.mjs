@@ -208,22 +208,24 @@ function callToolInBrowser(toolName, args, targetSession = null, timeoutMs = 150
     }
 
     if (targets.length === 0) {
-      // Check if an active bridge server is running on port 3001 and forward to it
-      try {
-        const forwardRes = await fetch(`http://localhost:${PORT}/api/mcp`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tool: toolName, args: args || {}, session: targetSession })
-        });
-        if (forwardRes.ok) {
-          const json = await forwardRes.json();
-          if (json.result) {
-            resolve(json.result);
-            return;
+      // Only forward to HTTP bridge when running as a separate stdio process
+      if (isStdioMode) {
+        try {
+          const forwardRes = await fetch(`http://localhost:${PORT}/api/mcp`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tool: toolName, args: args || {}, session: targetSession })
+          });
+          if (forwardRes.ok) {
+            const json = await forwardRes.json();
+            if (json.result) {
+              resolve(json.result);
+              return;
+            }
           }
+        } catch {
+          // Fall through
         }
-      } catch {
-        // Fall through
       }
 
       resolve({
