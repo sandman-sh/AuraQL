@@ -119,9 +119,9 @@ export const AgentConnectModal: React.FC<AgentConnectModalProps> = ({
   }
 }`;
 
-  const codexCliCmd = bridgeTarget === 'cloud' 
-    ? `codex mcp add auraql "${activeTargetUrl}/sse?session=${userSessionId}"`
-    : `codex mcp add auraql node scripts/mcp-bridge.mjs --stdio`;
+  const codexCliCmd = desktopMethod === 'sse'
+    ? `codex mcp add --url "${activeTargetUrl}/sse?session=${userSessionId}" auraql`
+    : `codex mcp add auraql -- node scripts/mcp-bridge.mjs --stdio`;
 
   const pythonSnippet = `import requests
 
