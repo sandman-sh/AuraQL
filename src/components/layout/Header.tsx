@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Home, FileText, Plus, Database, Bot, BookOpen, ChevronDown, Search, Check, Share2, Printer, HardDrive, Sparkles } from 'lucide-react';
+import { Upload, Home, FileText, Plus, Database, Bot, BookOpen, ChevronDown, Search, Check, Share2, Printer, HardDrive, Sparkles, Trash2 } from 'lucide-react';
 import { AuraLogo } from '../common/AuraLogo';
 import { ThemeToggle } from '../common/ThemeToggle';
 import { auraEngine } from '../../engine/auraql';
@@ -19,6 +19,7 @@ interface HeaderProps {
   onOpenDocs?: () => void;
   onOpenShare?: () => void;
   onOpenExportSlide?: () => void;
+  onClearScreen?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -35,7 +36,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenDocs,
   onOpenShare,
   onOpenExportSlide,
-  onOpenDemoModal
+  onOpenDemoModal,
+  onClearScreen
 }) => {
   const tableNames = auraEngine.getTableNames();
 
@@ -145,7 +147,7 @@ export const Header: React.FC<HeaderProps> = ({
                   })}
                 </div>
 
-                <div className="pt-2 mt-1 border-t border-slate-200 dark:border-white/10">
+                <div className="pt-2 mt-1 border-t border-slate-200 dark:border-white/10 space-y-1">
                   <button
                     onClick={() => {
                       setIsTableDropdownOpen(false);
@@ -156,6 +158,19 @@ export const Header: React.FC<HeaderProps> = ({
                     <Plus className="w-3 h-3" />
                     <span>Upload More Tables (.csv, .json)</span>
                   </button>
+
+                  {onClearScreen && (
+                    <button
+                      onClick={() => {
+                        setIsTableDropdownOpen(false);
+                        onClearScreen();
+                      }}
+                      className="w-full flex items-center justify-center gap-1.5 py-1 text-[11px] text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>Clear All Tables & Reset Screen</span>
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -205,7 +220,7 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="flex items-center gap-1">
                 <button
                   onClick={onOpenUpload}
-                  className="p-1 px-1.5 rounded-none text-xs font-mono bg-slate-100 hover:bg-slate-200 dark:bg-dark-900 dark:hover:bg-dark-800 text-brand-600 dark:text-brand-400 border border-slate-300 dark:border-white/10 flex items-center gap-1 shrink-0"
+                  className="p-1 px-1.5 rounded-none text-xs font-mono bg-slate-100 hover:bg-slate-200 dark:bg-dark-900 dark:hover:bg-dark-850 text-brand-600 dark:text-brand-400 border border-slate-300 dark:border-white/10 flex items-center gap-1 shrink-0"
                   title="Upload New Dataset"
                 >
                   <Plus className="w-3 h-3" />
@@ -220,6 +235,17 @@ export const Header: React.FC<HeaderProps> = ({
                   <Sparkles className="w-3 h-3 text-purple-500" />
                   <span className="hidden sm:inline text-[10px]">Demo</span>
                 </button>
+
+                {onClearScreen && (
+                  <button
+                    onClick={onClearScreen}
+                    className="p-1 px-1.5 rounded-none text-xs font-mono bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 dark:hover:bg-rose-900 text-rose-600 dark:text-rose-400 border border-rose-300 dark:border-rose-500/30 flex items-center gap-1 shrink-0 transition-colors"
+                    title="Clear Screen & Data"
+                  >
+                    <Trash2 className="w-3 h-3 text-rose-500" />
+                    <span className="hidden sm:inline text-[10px] font-bold">Clear</span>
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -282,6 +308,18 @@ export const Header: React.FC<HeaderProps> = ({
           <Upload className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
           <span className="hidden sm:inline">Import CSV/JSON</span>
         </button>
+
+        {/* Clear Screen / Reset Action */}
+        {tableNames.length > 0 && onClearScreen && (
+          <button
+            onClick={onClearScreen}
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-none text-xs font-mono font-medium bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900 text-rose-600 dark:text-rose-400 border border-rose-300 dark:border-rose-500/30 transition-colors"
+            title="Clear all tables and reset workspace"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Clear Screen</span>
+          </button>
+        )}
 
         {/* Share Dashboard Link */}
         {onOpenShare && (

@@ -34,7 +34,8 @@ import {
   BarChart2,
   Terminal,
   Activity,
-  Table as TableIcon
+  Table as TableIcon,
+  Trash2
 } from 'lucide-react';
 
 export type WindowId = 'stats' | 'graph' | 'terminal' | 'table';
@@ -48,7 +49,10 @@ interface StudioWorkspaceProps {
 
 export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome, onOpenDocs }) => {
   const initialTables = auraEngine.getTableNames();
-  const [activeDataset, setActiveDataset] = useState<string>(initialTables[0] || '');
+  const savedActiveDataset = typeof window !== 'undefined' ? localStorage.getItem('auraql_active_dataset') || '' : '';
+  const [activeDataset, setActiveDataset] = useState<string>(
+    initialTables.includes(savedActiveDataset) ? savedActiveDataset : initialTables[0] || ''
+  );
   const [isDemoModalOpen, setIsDemoModalOpen] = useState<boolean>(false);
   const [isDragOverScreen, setIsDragOverScreen] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -198,10 +202,58 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome, 
     };
   }, [activeDataset]);
 
+  // Hydrate persistence from IndexedDB & LocalStorage on initial load so page reloads preserve datasets
+  useEffect(() => {
+    const hydrateStorage = async () => {
+      await auraEngine.hydrateFromStorage();
+      const tables = auraEngine.getTableNames();
+      const saved = typeof window !== 'undefined' ? localStorage.getItem('auraql_active_dataset') : null;
+      if (saved && tables.includes(saved)) {
+        handleSelectDataset(saved);
+      } else if (tables.length > 0 && !activeDataset) {
+        handleSelectDataset(tables[0]);
+      }
+    };
+    hydrateStorage();
+  }, []);
+
+  // Clear Screen: cleanly unloads all datasets from RAM heap, IndexedDB, and LocalStorage
+  const handleClearScreen = async () => {
+    const confirmClear = window.confirm('Clear screen and reset all loaded datasets?');
+    if (!confirmClear) return;
+
+    await auraEngine.clearAllTables();
+    setActiveDataset('');
+    setCurrentSql('');
+    setQueryResult({
+      sql: '',
+      columns: [],
+      rows: [],
+      rowCount: 0,
+      executionTimeMs: 0,
+      timestamp: new Date()
+    });
+    setChartConfig({
+      type: 'bar',
+      title: 'Analytics Overview',
+      xAxis: '',
+      yAxis: '',
+      colorTheme: 'purple'
+    });
+    setActiveFilter(null);
+    setScenarioResult(null);
+    setAnomalyReport(null);
+  };
+
   const handleSelectDataset = (tableName: string) => {
     if (!tableName) return;
     const safeName = tableName.toLowerCase();
     setActiveDataset(safeName);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('auraql_active_dataset', safeName);
+      } catch (e) {}
+    }
     setActiveFilter(null);
     const meta = DATASETS_METADATA[safeName];
     const initialQuery = meta?.sampleQueries?.[0]?.sql || `SELECT * FROM ${safeName} LIMIT 50;`;
@@ -330,34 +382,14 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome, 
 
   const handleCustomDatasetImported = (tableName: string, _count?: number) => {
     const safeName = (tableName || '').toLowerCase().replace(/[^a-z0-9_]/g, '_');
-    setActiveDataset(safeName);
     setIsUploadOpen(false);
     setIsDemoModalOpen(false);
-    const customSql = `SELECT * FROM ${safeName} LIMIT 50;`;
-    setCurrentSql(customSql);
-    handleRunQuery(customSql);
-
-    const rows = auraEngine.getTableData(safeName);
-    if (rows.length > 0 && rows[0]) {
-      const firstRow = rows[0];
-      const stringCols = Object.keys(firstRow).filter((k) => typeof firstRow[k] === 'string');
-      const numericCols = Object.keys(firstRow).filter(
-        (k) => typeof firstRow[k] === 'number' || !isNaN(Number(firstRow[k]))
-      );
-
-      setChartConfig({
-        type: 'bar',
-        title: `${safeName} Overview`,
-        xAxis: stringCols[0] || Object.keys(firstRow)[0] || '',
-        yAxis: numericCols[0] || Object.keys(firstRow)[1] || '',
-        colorTheme: 'purple'
-      });
-    }
+    handleSelectDataset(safeName);
   };
 
-  // Helper to load sample dataset on user demand without starting with preloaded data
+  // Helper to load sample dataset on user demand with reload persistence
   const handleLoadSampleData = (sampleKey: string = 'ecommerce_sales') => {
-    auraEngine.loadPreloadedDataset(sampleKey);
+    auraEngine.loadPreloadedDataset(sampleKey, true);
     handleSelectDataset(sampleKey);
     setIsDemoModalOpen(false);
   };
@@ -789,6 +821,7 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome, 
         onSelectDataset={handleSelectDataset}
         onOpenUpload={() => fileInputRef.current?.click()}
         onOpenDemoModal={() => setIsDemoModalOpen(true)}
+        onClearScreen={handleClearScreen}
         onOpenReport={() => setIsReportOpen(true)}
         onOpenAgentModal={() => setIsAgentModalOpen(true)}
         onToggleInspector={() => setIsInspectorOpen(!isInspectorOpen)}
@@ -950,6 +983,15 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome, 
                 >
                   <RotateCcw className="w-3 h-3 text-slate-400" />
                   <span>Reset 50/50</span>
+                </button>
+
+                <button
+                  onClick={handleClearScreen}
+                  className="px-2 py-1 rounded-none bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 border border-rose-300 dark:border-rose-500/30 text-[10px] flex items-center gap-1 transition-colors font-semibold"
+                  title="Clear screen and return to clean empty workspace"
+                >
+                  <Trash2 className="w-3 h-3 text-rose-500" />
+                  <span>Clear Screen</span>
                 </button>
               </div>
             </div>

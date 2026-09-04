@@ -55,28 +55,48 @@ export class AuraQLEngine {
 
   /**
    * Loads a sample dataset into memory on demand.
+   * Remembers the loaded demo table so it persists across page reloads.
    */
-  public loadPreloadedDataset(tableName: string): Record<string, any>[] {
+  public loadPreloadedDataset(tableName: string, persistDemoKey: boolean = true): Record<string, any>[] {
     const key = (tableName || '').toLowerCase().trim();
-    if (key === 'ecommerce_sales') {
-      this.tables.set('ecommerce_sales', INITIAL_ECOMMERCE_DATA);
-      return INITIAL_ECOMMERCE_DATA;
-    }
-    if (key === 'saas_churn_metrics') {
-      this.tables.set('saas_churn_metrics', INITIAL_SAAS_CHURN_DATA);
-      return INITIAL_SAAS_CHURN_DATA;
-    }
-    if (key === 'cloud_software_financials') {
-      this.tables.set('cloud_software_financials', INITIAL_FINANCIALS_DATA);
-      return INITIAL_FINANCIALS_DATA;
+    let data: Record<string, any>[] | null = null;
+    if (key === 'ecommerce_sales') data = INITIAL_ECOMMERCE_DATA;
+    else if (key === 'saas_churn_metrics') data = INITIAL_SAAS_CHURN_DATA;
+    else if (key === 'cloud_software_financials') data = INITIAL_FINANCIALS_DATA;
+
+    if (data) {
+      this.tables.set(key, data);
+      if (persistDemoKey && typeof window !== 'undefined') {
+        try {
+          const saved: string[] = JSON.parse(localStorage.getItem('auraql_demo_tables') || '[]');
+          if (!saved.includes(key)) {
+            saved.push(key);
+            localStorage.setItem('auraql_demo_tables', JSON.stringify(saved));
+          }
+        } catch (e) {}
+      }
+      return data;
     }
     return this.tables.get(key) || [];
   }
 
   /**
-   * Hydrates user tables saved in browser IndexedDB
+   * Hydrates user tables saved in browser IndexedDB and active demo tables in localStorage
    */
-  private async hydrateFromStorage() {
+  public async hydrateFromStorage(): Promise<void> {
+    // 1. Restore any active demo datasets
+    if (typeof window !== 'undefined') {
+      try {
+        const savedDemos: string[] = JSON.parse(localStorage.getItem('auraql_demo_tables') || '[]');
+        if (Array.isArray(savedDemos)) {
+          for (const key of savedDemos) {
+            this.loadPreloadedDataset(key, false);
+          }
+        }
+      } catch (e) {}
+    }
+
+    // 2. Restore user uploaded tables from IndexedDB
     try {
       const stored = await auraStorage.loadAllTables();
       for (const t of stored) {
@@ -89,6 +109,20 @@ export class AuraQLEngine {
     }
   }
 
+  /**
+   * Clears all in-memory tables, active table localStorage, and local IndexedDB tables
+   */
+  public async clearAllTables(): Promise<void> {
+    this.tables.clear();
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('auraql_active_dataset');
+        localStorage.removeItem('auraql_demo_tables');
+      } catch (e) {}
+    }
+    await auraStorage.clearAll();
+  }
+
   public getTableNames(): string[] {
     return Array.from(this.tables.keys());
   }
@@ -98,9 +132,6 @@ export class AuraQLEngine {
     const key = tableName.toLowerCase().trim();
     if (this.tables.has(key)) {
       return this.tables.get(key) || [];
-    }
-    if (key === 'ecommerce_sales' || key === 'saas_churn_metrics' || key === 'cloud_software_financials') {
-      return this.loadPreloadedDataset(key);
     }
     return [];
   }

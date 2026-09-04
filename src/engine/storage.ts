@@ -134,6 +134,27 @@ export class AuraStorageService {
   }
 
   /**
+   * Clear all stored tables from IndexedDB
+   */
+  public async clearAll(): Promise<boolean> {
+    if (!this.isSupported) return false;
+    try {
+      const db = await this.getDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction('tables', 'readwrite');
+        const store = tx.objectStore('tables');
+        const req = store.clear();
+
+        req.onsuccess = () => resolve(true);
+        req.onerror = () => reject(req.error);
+      });
+    } catch (e) {
+      console.warn('[AuraStorage] Failed to clear tables from IndexedDB', e);
+      return false;
+    }
+  }
+
+  /**
    * Record executed SQL query to local query history
    */
   public async logQuery(sql: string, rowCount: number, durationMs: number): Promise<void> {
