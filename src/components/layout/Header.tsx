@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Home, FileText, Plus, Database, Bot, BookOpen, ChevronDown, Search, Check, Share2, Printer, HardDrive, Sparkles, Trash2 } from 'lucide-react';
+import { Upload, Home, FileText, Plus, Database, Bot, BookOpen, ChevronDown, Search, Check, Share2, Printer, HardDrive, Sparkles, Trash2, MoreHorizontal } from 'lucide-react';
 import { AuraLogo } from '../common/AuraLogo';
 import { ThemeToggle } from '../common/ThemeToggle';
 import { auraEngine } from '../../engine/auraql';
@@ -42,13 +42,18 @@ export const Header: React.FC<HeaderProps> = ({
   const tableNames = auraEngine.getTableNames();
 
   const [isTableDropdownOpen, setIsTableDropdownOpen] = useState(false);
+  const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
   const [tableSearchQuery, setTableSearchQuery] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const actionsMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setIsTableDropdownOpen(false);
+      }
+      if (actionsMenuRef.current && !actionsMenuRef.current.contains(e.target as Node)) {
+        setIsActionsMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -265,18 +270,6 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="sm:hidden">Agent</span>
         </button>
 
-        {/* Executive Report Modal Trigger */}
-        {tableNames.length > 0 && (
-          <button
-            onClick={onOpenReport}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-none text-xs font-mono font-semibold bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/60 dark:hover:bg-brand-900/60 text-brand-700 dark:text-brand-300 border border-brand-300 dark:border-brand-500/40 transition-colors"
-            title="Generate Executive Briefing"
-          >
-            <FileText className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
-            <span className="hidden lg:inline">Executive Briefing</span>
-          </button>
-        )}
-
         {/* WebMCP Telemetry Indicator */}
         <button
           onClick={onToggleInspector}
@@ -306,65 +299,133 @@ export const Header: React.FC<HeaderProps> = ({
           className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-none text-xs font-mono font-medium bg-slate-100 hover:bg-slate-200 dark:bg-dark-900 dark:hover:bg-dark-850 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-white/10 hover:border-brand-500/30 transition-colors"
         >
           <Upload className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
-          <span className="hidden sm:inline">Import CSV/JSON</span>
+          <span className="hidden sm:inline">Import Data</span>
         </button>
 
-        {/* Clear Screen / Reset Action */}
-        {tableNames.length > 0 && onClearScreen && (
+        {/* Unified Actions Dropdown Menu (Share, Briefing, Export, Docs, Clear Screen) */}
+        <div className="relative" ref={actionsMenuRef}>
           <button
-            onClick={onClearScreen}
-            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-none text-xs font-mono font-medium bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900 text-rose-600 dark:text-rose-400 border border-rose-300 dark:border-rose-500/30 transition-colors"
-            title="Clear all tables and reset workspace"
+            onClick={() => setIsActionsMenuOpen(!isActionsMenuOpen)}
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-none text-xs font-mono font-semibold border transition-all ${
+              isActionsMenuOpen
+                ? 'bg-brand-50 dark:bg-brand-950 border-brand-500 text-brand-700 dark:text-brand-300 shadow-sm'
+                : 'bg-slate-100 hover:bg-slate-200 dark:bg-dark-900 dark:hover:bg-dark-850 text-slate-800 dark:text-slate-200 border-slate-300 dark:border-white/10 hover:border-brand-500/30'
+            }`}
+            title="Tools, Reports & Actions Menu"
           >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Clear Screen</span>
+            <MoreHorizontal className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
+            <span>Actions</span>
+            <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${isActionsMenuOpen ? 'rotate-180' : ''}`} />
           </button>
-        )}
 
-        {/* Share Dashboard Link */}
-        {onOpenShare && (
-          <button
-            onClick={onOpenShare}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-none text-xs font-mono font-medium bg-slate-100 hover:bg-slate-200 dark:bg-dark-900 dark:hover:bg-dark-850 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-white/10 hover:border-brand-500/30 transition-colors"
-            title="Share Live Dashboard via Zero-Server Link"
-          >
-            <Share2 className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
-            <span className="hidden xl:inline">Share</span>
-          </button>
-        )}
+          {isActionsMenuOpen && (
+            <div className="absolute right-0 mt-1.5 w-64 bg-white dark:bg-dark-950 border border-slate-300 dark:border-white/10 shadow-2xl z-50 p-1.5 font-mono text-xs animate-fadeIn">
+              <div className="px-2.5 py-1 text-[10px] text-slate-400 uppercase tracking-wider font-bold border-b border-slate-200 dark:border-white/10 mb-1 flex items-center justify-between">
+                <span>Tools & Export</span>
+                <span className="text-[9px] text-brand-600 dark:text-brand-400">AuraQL</span>
+              </div>
 
-        {/* Export Slide PDF */}
-        {onOpenExportSlide && (
-          <button
-            onClick={onOpenExportSlide}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-none text-xs font-mono font-medium bg-slate-100 hover:bg-slate-200 dark:bg-dark-900 dark:hover:bg-dark-850 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-white/10 hover:border-brand-500/30 transition-colors"
-            title="Export 1-Click Executive PDF Slide"
-          >
-            <Printer className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
-            <span className="hidden xl:inline">Export PDF</span>
-          </button>
-        )}
+              {/* Share Dashboard */}
+              {onOpenShare && (
+                <button
+                  onClick={() => {
+                    setIsActionsMenuOpen(false);
+                    onOpenShare();
+                  }}
+                  className="w-full flex items-center gap-2.5 px-2.5 py-2 text-left text-slate-700 dark:text-slate-300 hover:bg-brand-50 dark:hover:bg-brand-950/50 hover:text-brand-700 dark:hover:text-brand-300 transition-colors group"
+                >
+                  <Share2 className="w-4 h-4 text-slate-400 group-hover:text-brand-500 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold text-[11px] flex items-center justify-between">
+                      <span>Share Dashboard</span>
+                      <span className="text-[9px] px-1 bg-brand-100 dark:bg-brand-900/60 text-brand-700 dark:text-brand-300">Link</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-sans truncate">Zero-server encoded URL</div>
+                  </div>
+                </button>
+              )}
 
-        {/* Local Storage Indicator */}
-        <div
-          className="hidden 2xl:flex items-center gap-1.5 px-2 py-1 text-[10px] font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-500/30 rounded-none"
-          title="Browser-Native IndexedDB Active • Auto-saving datasets locally"
-        >
-          <HardDrive className="w-3 h-3" />
-          <span>Local DB</span>
+              {/* Executive Briefing */}
+              {tableNames.length > 0 && onOpenReport && (
+                <button
+                  onClick={() => {
+                    setIsActionsMenuOpen(false);
+                    onOpenReport();
+                  }}
+                  className="w-full flex items-center gap-2.5 px-2.5 py-2 text-left text-slate-700 dark:text-slate-300 hover:bg-brand-50 dark:hover:bg-brand-950/50 hover:text-brand-700 dark:hover:text-brand-300 transition-colors group"
+                >
+                  <FileText className="w-4 h-4 text-slate-400 group-hover:text-brand-500 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold text-[11px] flex items-center justify-between">
+                      <span>Executive Briefing</span>
+                      <span className="text-[9px] px-1 bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300">Report</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-sans truncate">Automated executive KPI report</div>
+                  </div>
+                </button>
+              )}
+
+              {/* Export PDF Slide */}
+              {tableNames.length > 0 && onOpenExportSlide && (
+                <button
+                  onClick={() => {
+                    setIsActionsMenuOpen(false);
+                    onOpenExportSlide();
+                  }}
+                  className="w-full flex items-center gap-2.5 px-2.5 py-2 text-left text-slate-700 dark:text-slate-300 hover:bg-brand-50 dark:hover:bg-brand-950/50 hover:text-brand-700 dark:hover:text-brand-300 transition-colors group"
+                >
+                  <Printer className="w-4 h-4 text-slate-400 group-hover:text-brand-500 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold text-[11px] flex items-center justify-between">
+                      <span>Export PDF Slide</span>
+                      <span className="text-[9px] px-1 bg-slate-200 dark:bg-dark-850 text-slate-700 dark:text-slate-300">PDF</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-sans truncate">1-click presentation slide</div>
+                  </div>
+                </button>
+              )}
+
+              {/* Documentation */}
+              {onOpenDocs && (
+                <button
+                  onClick={() => {
+                    setIsActionsMenuOpen(false);
+                    onOpenDocs();
+                  }}
+                  className="w-full flex items-center gap-2.5 px-2.5 py-2 text-left text-slate-700 dark:text-slate-300 hover:bg-brand-50 dark:hover:bg-brand-950/50 hover:text-brand-700 dark:hover:text-brand-300 transition-colors group"
+                >
+                  <BookOpen className="w-4 h-4 text-slate-400 group-hover:text-brand-500 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold text-[11px] flex items-center justify-between">
+                      <span>Documentation</span>
+                      <span className="text-[9px] px-1 bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300">Docs</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-sans truncate">WebMCP architecture & specs</div>
+                  </div>
+                </button>
+              )}
+
+              {/* Clear Screen & Reset */}
+              {tableNames.length > 0 && onClearScreen && (
+                <div className="pt-1 mt-1 border-t border-slate-200 dark:border-white/10">
+                  <button
+                    onClick={() => {
+                      setIsActionsMenuOpen(false);
+                      onClearScreen();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-2.5 py-2 text-left text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors group"
+                  >
+                    <Trash2 className="w-4 h-4 text-rose-500 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="font-bold text-[11px]">Clear Screen & Reset</div>
+                      <div className="text-[10px] text-rose-400/80 font-sans truncate">Unload tables & reset studio</div>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
-
-        {/* Developer Documentation Trigger */}
-        {onOpenDocs && (
-          <button
-            onClick={onOpenDocs}
-            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-none text-xs font-mono font-medium bg-slate-100 hover:bg-slate-200 dark:bg-dark-900 dark:hover:bg-dark-850 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-white/10 hover:border-brand-500/30 transition-colors"
-            title="Read Developer Documentation"
-          >
-            <BookOpen className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
-            <span className="hidden sm:inline">Docs</span>
-          </button>
-        )}
 
         {/* Light / Dark Mode Toggle */}
         <ThemeToggle />
