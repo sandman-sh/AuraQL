@@ -7,13 +7,9 @@ import {
   Zap,
   Cpu,
   Key,
-  Globe,
-  Radio,
   ExternalLink,
-  Shield,
   Play,
   Loader2,
-  HelpCircle,
   Server,
   Code2,
   Terminal,
@@ -41,6 +37,7 @@ export const AgentConnectModal: React.FC<AgentConnectModalProps> = ({
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [bridgeRunning, setBridgeRunning] = useState<boolean>(webMcp.isBridgeConnected);
   const [bridgeTarget, setBridgeTarget] = useState<'cloud' | 'local'>('cloud');
+  const [desktopMethod, setDesktopMethod] = useState<'sse' | 'stdio'>('sse');
 
   useEffect(() => {
     if (isOpen) {
@@ -58,15 +55,17 @@ export const AgentConnectModal: React.FC<AgentConnectModalProps> = ({
 
   if (!isOpen) return null;
 
+  const activeTargetUrl = bridgeTarget === 'cloud' ? 'https://auraql.onrender.com' : 'http://localhost:3001';
+
   const handleSave = () => {
     auraAgent.updateConfig(config);
     setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 2500);
+    setTimeout(() => setIsSaved(false), 2200);
   };
 
   const handleTestAgent = async () => {
     setTestStatus('testing');
-    setTestOutput('Connecting to real LLM provider (not mocked)...');
+    setTestOutput('Initiating real LLM provider tool call...');
     auraAgent.updateConfig(config);
 
     try {
@@ -80,14 +79,14 @@ export const AgentConnectModal: React.FC<AgentConnectModalProps> = ({
 
       if (res.success) {
         setTestStatus('success');
-        setTestOutput((prev) => `${prev}\n\n✅ Real Agent execution complete! Tools executed: ${res.toolsExecuted.join(', ')}`);
+        setTestOutput((prev) => `${prev}\n\n✅ Real Agent execution complete! Executed: ${res.toolsExecuted.join(', ')}`);
       } else {
         setTestStatus('error');
         setTestOutput((prev) => `${prev}\n\n❌ ${res.finalMessage}`);
       }
     } catch (err: any) {
       setTestStatus('error');
-      setTestOutput(`❌ Error running agent: ${err.message}`);
+      setTestOutput(`❌ Error executing agent: ${err.message}`);
     }
   };
 
@@ -96,8 +95,6 @@ export const AgentConnectModal: React.FC<AgentConnectModalProps> = ({
     setCopiedKey(key);
     setTimeout(() => setCopiedKey(null), 2000);
   };
-
-  const activeTargetUrl = bridgeTarget === 'cloud' ? 'https://auraql.onrender.com' : 'http://localhost:3001';
 
   // Real ChatGPT Desktop configuration
   const chatGptDesktopConfig = `{
@@ -129,7 +126,7 @@ export const AgentConnectModal: React.FC<AgentConnectModalProps> = ({
 # 1. Connect to live WebMCP Bridge
 BRIDGE_URL = "${activeTargetUrl}/api/mcp"
 
-# 2. ChatGPT / Agent executes SQL query in browser AuraQL memory
+# 2. Execute analytical SQL in local AuraQL browser memory
 res = requests.post(BRIDGE_URL, json={
     "tool": "execute_sql_query",
     "args": {
@@ -138,12 +135,12 @@ res = requests.post(BRIDGE_URL, json={
 })
 print("Result from AuraQL:", res.json())
 
-# 3. Agent renders dynamic chart on user's live browser screen
+# 3. Agent renders interactive chart directly on user's live screen
 requests.post(BRIDGE_URL, json={
     "tool": "render_interactive_chart",
     "args": {
         "type": "bar",
-        "title": "Revenue by Product Vertical",
+        "title": "Revenue by Product Category",
         "xAxis": "product_category",
         "yAxis": "total_rev",
         "colorTheme": "purple"
@@ -151,260 +148,219 @@ requests.post(BRIDGE_URL, json={
 })`;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 animate-fadeIn">
-      <div className="w-full max-w-3xl bg-white dark:bg-dark-950 border border-slate-300 dark:border-white/10 rounded-none shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-fadeIn">
+      <div className="w-full max-w-2xl bg-white dark:bg-dark-950 border border-slate-300 dark:border-white/10 shadow-2xl flex flex-col h-[85vh] max-h-[620px] overflow-hidden transition-colors">
+        
         {/* Header */}
-        <div className="p-4 border-b border-slate-200 dark:border-white/[0.08] flex items-center justify-between bg-slate-50 dark:bg-dark-900/80">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-none bg-brand-600 text-white flex items-center justify-center shadow-sm">
+        <div className="px-4 py-3 border-b border-slate-200 dark:border-white/10 flex items-center justify-between bg-slate-50 dark:bg-dark-900/90 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 bg-brand-600 text-white flex items-center justify-center shadow-sm">
               <Bot className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold font-mono text-slate-900 dark:text-white flex items-center gap-2">
-                <span>CONNECT AI AGENT (CHATGPT & WEBMCP)</span>
-                <span className="px-1.5 py-0.5 text-[9px] uppercase font-bold tracking-wider rounded-none bg-emerald-50 text-emerald-600 dark:bg-emerald-950/80 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-500/40">
-                  Real MCP • Not Mocked
+              <h3 className="text-xs sm:text-sm font-bold font-mono text-slate-900 dark:text-white flex items-center gap-2">
+                <span>AI AGENT & WEBMCP HUB</span>
+                <span className="px-1.5 py-0.2 text-[9px] uppercase font-bold tracking-wider bg-emerald-50 text-emerald-600 dark:bg-emerald-950/80 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-500/40">
+                  {bridgeRunning ? 'Bridge Active' : 'Real MCP'}
                 </span>
               </h3>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-                Connect Desktop ChatGPT, Claude Desktop, Codex CLI, or real in-browser AI (GPT-4o, Claude 3.7 Sonnet, Gemini 2.0)
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-sans">
+                Connect Desktop ChatGPT, Claude Desktop, or configure direct in-browser LLM keys.
               </p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-1 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
+            className="p-1 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+            title="Close modal"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Modal Subnav Tabs */}
-        <div className="flex border-b border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-dark-900/60 text-xs font-mono overflow-x-auto">
+        {/* Navigation Tabs */}
+        <div className="flex border-b border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-dark-900/60 text-xs font-mono overflow-x-auto shrink-0">
           <button
+            type="button"
             onClick={() => setActiveTab('chatgpt-desktop')}
-            className={`py-2 px-3 text-center transition-all flex items-center justify-center gap-2 shrink-0 ${
+            className={`py-2 px-3 sm:px-4 text-center transition-all flex items-center gap-1.5 shrink-0 ${
               activeTab === 'chatgpt-desktop'
                 ? 'bg-brand-600 text-white font-bold shadow-sm'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-dark-800'
             }`}
           >
             <Terminal className="w-3.5 h-3.5" />
-            <span>Desktop ChatGPT & Claude</span>
+            <span>Desktop MCP</span>
           </button>
 
           <button
+            type="button"
             onClick={() => setActiveTab('in-browser')}
-            className={`py-2 px-3 text-center transition-all flex items-center justify-center gap-2 shrink-0 ${
+            className={`py-2 px-3 sm:px-4 text-center transition-all flex items-center gap-1.5 shrink-0 ${
               activeTab === 'in-browser'
                 ? 'bg-brand-600 text-white font-bold shadow-sm'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-dark-800'
             }`}
           >
             <Cpu className="w-3.5 h-3.5" />
-            <span>In-Browser AI (GPT-4o, Claude 3.7, Gemini 2.0)</span>
+            <span>In-Browser LLM</span>
           </button>
 
           <button
+            type="button"
             onClick={() => setActiveTab('external')}
-            className={`py-2 px-3 text-center transition-all flex items-center justify-center gap-2 shrink-0 ${
+            className={`py-2 px-3 sm:px-4 text-center transition-all flex items-center gap-1.5 shrink-0 ${
               activeTab === 'external'
                 ? 'bg-brand-600 text-white font-bold shadow-sm'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-dark-800'
             }`}
           >
             <Code2 className="w-3.5 h-3.5" />
-            <span>Python & LangChain</span>
+            <span>Python API</span>
           </button>
 
           <button
+            type="button"
             onClick={() => setActiveTab('bridge')}
-            className={`py-2 px-3 text-center transition-all flex items-center justify-center gap-2 shrink-0 ${
+            className={`py-2 px-3 sm:px-4 text-center transition-all flex items-center gap-1.5 shrink-0 ${
               activeTab === 'bridge'
                 ? 'bg-brand-600 text-white font-bold shadow-sm'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-dark-800'
             }`}
           >
             <Server className="w-3.5 h-3.5" />
-            <span className="flex items-center gap-1.5">
-              <span>Bridge Server</span>
-              <span className={`w-2 h-2 rounded-full ${bridgeRunning ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
-            </span>
+            <span>Bridge Server</span>
+            <span className={`w-1.5 h-1.5 rounded-full ${bridgeRunning ? 'bg-emerald-400' : 'bg-rose-400'}`} />
           </button>
         </div>
 
-        {/* Modal Body */}
-        <div className="p-5 overflow-y-auto flex-1 font-mono text-xs space-y-4">
-          {/* TAB 1: Desktop ChatGPT (Codex) */}
+        {/* Scrollable Body Content */}
+        <div className="p-4 sm:p-5 overflow-y-auto flex-1 font-mono text-xs space-y-3.5">
+          
+          {/* TAB 1: Desktop ChatGPT & Claude Desktop */}
           {activeTab === 'chatgpt-desktop' && (
-            <div className="space-y-4">
-              <div className="p-3 bg-brand-50 dark:bg-brand-950/40 border border-brand-200 dark:border-brand-500/30 text-slate-700 dark:text-slate-300">
-                <h4 className="font-bold text-brand-700 dark:text-brand-300 flex items-center gap-1.5 mb-1">
-                  <Sparkles className="w-4 h-4 text-brand-600 dark:text-brand-400" />
-                  <span>Connecting Official Desktop ChatGPT (or Codex CLI)</span>
-                </h4>
-                <p className="text-[11px] font-sans text-slate-600 dark:text-slate-400 leading-relaxed">
-                  Desktop ChatGPT communicates directly with this app using the <strong>Model Context Protocol (MCP)</strong>.
-                  ChatGPT inspects the in-memory database, writes analytical SQL queries, and renders live charts directly on your screen.
+            <div className="space-y-3">
+              <div className="p-2.5 bg-brand-50/80 dark:bg-brand-950/40 border border-brand-200 dark:border-brand-500/30 text-slate-700 dark:text-slate-300">
+                <div className="font-bold text-brand-700 dark:text-brand-300 flex items-center gap-1.5 text-xs mb-0.5">
+                  <Sparkles className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
+                  <span>Desktop ChatGPT & Claude Integration</span>
+                </div>
+                <p className="text-[11px] font-sans text-slate-600 dark:text-slate-400">
+                  ChatGPT and Claude Desktop inspect browser memory via the <strong>Model Context Protocol (MCP)</strong>, executing SQL and rendering interactive charts live on screen.
                 </p>
               </div>
 
-              {/* Environment Toggle */}
-              <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-slate-100 dark:bg-dark-900 border border-slate-200 dark:border-white/10 text-xs">
-                <span className="font-semibold text-slate-700 dark:text-slate-300 font-sans">
-                  Active Bridge Server:
-                </span>
-                <div className="flex items-center gap-1.5 bg-slate-200 dark:bg-dark-800 p-1 rounded">
+              {/* Method Switcher & Target Selection */}
+              <div className="flex flex-wrap items-center justify-between gap-2 p-2 bg-slate-50 dark:bg-dark-900 border border-slate-200 dark:border-white/10 text-xs">
+                <div className="flex items-center gap-1">
                   <button
                     type="button"
-                    onClick={() => setBridgeTarget('cloud')}
-                    className={`px-2.5 py-1 text-[11px] rounded transition-all font-mono ${
-                      bridgeTarget === 'cloud'
+                    onClick={() => setDesktopMethod('sse')}
+                    className={`px-2.5 py-1 text-[11px] font-semibold transition-all ${
+                      desktopMethod === 'sse'
                         ? 'bg-brand-600 text-white font-bold shadow-sm'
-                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-dark-800'
                     }`}
                   >
-                    ☁️ Cloud Render (auraql.onrender.com)
+                    Remote SSE (Zero Install)
                   </button>
                   <button
                     type="button"
-                    onClick={() => setBridgeTarget('local')}
-                    className={`px-2.5 py-1 text-[11px] rounded transition-all font-mono ${
-                      bridgeTarget === 'local'
+                    onClick={() => setDesktopMethod('stdio')}
+                    className={`px-2.5 py-1 text-[11px] font-semibold transition-all ${
+                      desktopMethod === 'stdio'
                         ? 'bg-brand-600 text-white font-bold shadow-sm'
-                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-dark-800'
                     }`}
                   >
-                    💻 Localhost (localhost:3001)
+                    Local Stdio (Node)
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-slate-400 hidden sm:inline">Target:</span>
+                  <button
+                    type="button"
+                    onClick={() => setBridgeTarget(bridgeTarget === 'cloud' ? 'local' : 'cloud')}
+                    className="px-2 py-0.5 text-[10px] bg-slate-200 dark:bg-dark-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-white/10"
+                  >
+                    {bridgeTarget === 'cloud' ? '☁️ Cloud Render' : '💻 Localhost'}
                   </button>
                 </div>
               </div>
 
-              {/* Method 1: Remote SSE (Recommended) */}
-              <div className="border border-brand-300 dark:border-brand-500/40 bg-brand-50/40 dark:bg-dark-900 p-3.5 space-y-2">
+              {/* Code Box */}
+              <div className="border border-slate-300 dark:border-white/10 bg-slate-50 dark:bg-dark-900 p-3 space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-brand-700 dark:text-brand-400 flex items-center gap-1.5 text-xs">
-                    <Zap className="w-3.5 h-3.5" />
-                    <span>Method 1 (Recommended): Remote HTTP SSE Endpoint</span>
+                  <span className="font-bold text-[11px] text-slate-800 dark:text-slate-200 flex items-center gap-1">
+                    <Zap className="w-3 h-3 text-brand-500" />
+                    <span>Configuration JSON ({desktopMethod === 'sse' ? 'HTTP SSE' : 'Node Stdio'})</span>
                   </span>
                   <button
-                    onClick={() => handleCopy(chatGptSseConfig, 'desktop_sse')}
-                    className="flex items-center gap-1 text-[11px] bg-brand-600 hover:bg-brand-500 text-white px-2.5 py-1 rounded transition-colors font-sans"
+                    type="button"
+                    onClick={() => handleCopy(desktopMethod === 'sse' ? chatGptSseConfig : chatGptDesktopConfig, 'desktop_code')}
+                    className="text-[10px] text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1"
                   >
-                    {copiedKey === 'desktop_sse' ? <Check className="w-3 h-3 text-white" /> : <Copy className="w-3 h-3" />}
-                    <span>{copiedKey === 'desktop_sse' ? 'Copied' : 'Copy JSON'}</span>
+                    {copiedKey === 'desktop_code' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedKey === 'desktop_code' ? 'Copied' : 'Copy'}</span>
                   </button>
                 </div>
-                
-                <div className="text-[11px] text-slate-600 dark:text-slate-400 font-sans space-y-1">
-                  <p>Paste this config into your desktop AI app configuration file (no local code installation required):</p>
-                  <ul className="list-disc pl-4 text-[10px] font-mono space-y-0.5 text-slate-500 dark:text-slate-400">
-                    <li><strong>Claude Desktop (Windows):</strong> <code>%APPDATA%\Claude\claude_desktop_config.json</code></li>
-                    <li><strong>Claude Desktop (macOS):</strong> <code>~/Library/Application Support/Claude/claude_desktop_config.json</code></li>
-                    <li><strong>ChatGPT Desktop (Windows):</strong> <code>%APPDATA%\OpenAI\ChatGPT\mcp.json</code></li>
-                    <li><strong>ChatGPT Desktop (macOS):</strong> <code>~/Library/Application Support/OpenAI/ChatGPT/mcp.json</code></li>
-                  </ul>
-                </div>
 
-                <pre className="p-2.5 bg-slate-950 text-emerald-400 text-[11px] overflow-x-auto rounded border border-slate-800 font-mono">
-                  {chatGptSseConfig}
+                <pre className="p-2.5 bg-slate-950 text-emerald-400 text-[10px] overflow-x-auto max-h-36 border border-slate-800">
+                  {desktopMethod === 'sse' ? chatGptSseConfig : chatGptDesktopConfig}
                 </pre>
               </div>
 
-              {/* Method 2: Stdio */}
-              <div className="border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-dark-900 p-3">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                    <span>Method 2: Local Stdio Transport (Offline / Local Dev)</span>
-                  </span>
-                  <button
-                    onClick={() => handleCopy(chatGptDesktopConfig, 'desktop_stdio')}
-                    className="flex items-center gap-1 text-[11px] text-brand-600 dark:text-brand-400 hover:underline"
-                  >
-                    {copiedKey === 'desktop_stdio' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                    <span>{copiedKey === 'desktop_stdio' ? 'Copied' : 'Copy JSON'}</span>
-                  </button>
+              {/* File Paths Helper */}
+              <div className="p-2.5 bg-slate-50 dark:bg-dark-900 border border-slate-200 dark:border-white/10 text-[10px] space-y-1">
+                <span className="font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">Configuration File Locations:</span>
+                <div className="text-slate-600 dark:text-slate-300 space-y-0.5 font-sans">
+                  <div>• <strong>Claude Desktop (Win):</strong> <code className="font-mono text-[9px]">%APPDATA%\Claude\claude_desktop_config.json</code></div>
+                  <div>• <strong>ChatGPT Desktop (Win):</strong> <code className="font-mono text-[9px]">%APPDATA%\OpenAI\ChatGPT\mcp.json</code></div>
+                  <div>• <strong>Codex CLI:</strong> <code className="font-mono text-[9px]">{codexCliCmd}</code></div>
                 </div>
-                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-sans mb-1.5">
-                  For running directly from your cloned local repository:
-                </p>
-                <pre className="p-2.5 bg-slate-950 text-slate-300 text-[10px] overflow-x-auto rounded border border-slate-800">
-                  {chatGptDesktopConfig}
-                </pre>
-              </div>
-
-              {/* Method 3: Codex CLI */}
-              <div className="border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-dark-900 p-3">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                    <span>Method 3: OpenAI Codex CLI Command</span>
-                  </span>
-                  <button
-                    onClick={() => handleCopy(codexCliCmd, 'codex_cli')}
-                    className="flex items-center gap-1 text-[11px] text-brand-600 dark:text-brand-400 hover:underline"
-                  >
-                    {copiedKey === 'codex_cli' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                    <span>{copiedKey === 'codex_cli' ? 'Copied' : 'Copy Command'}</span>
-                  </button>
-                </div>
-                <div className="p-2.5 bg-slate-950 text-emerald-400 text-[10px] overflow-x-auto rounded border border-slate-800 font-mono">
-                  <code>{codexCliCmd}</code>
-                </div>
-              </div>
-
-              {/* Verification instructions */}
-              <div className="p-3 bg-slate-100 dark:bg-dark-900 border border-slate-200 dark:border-white/10 text-[11px] text-slate-700 dark:text-slate-300 font-sans leading-relaxed">
-                <div className="font-bold font-mono text-slate-900 dark:text-white mb-1">Testing with ChatGPT:</div>
-                <ol className="list-decimal pl-5 space-y-1">
-                  <li>Start Desktop ChatGPT with the configuration above.</li>
-                  <li>In ChatGPT, type: <code>"Inspect tables in Aura Analytics and show revenue by category as a bar chart"</code></li>
-                  <li>Watch ChatGPT invoke <code>execute_sql_query</code> and <code>render_interactive_chart</code>, instantly updating this dashboard!</li>
-                </ol>
               </div>
             </div>
           )}
 
-          {/* TAB 2: In-Browser Real OpenAI API Execution */}
+          {/* TAB 2: In-Browser Real OpenAI / Anthropic / Gemini Execution */}
           {activeTab === 'in-browser' && (
-            <div className="space-y-4">
-              <div className="p-3 bg-brand-50 dark:bg-brand-950/40 border border-brand-200 dark:border-brand-500/30 text-slate-700 dark:text-slate-300">
-                <span className="font-bold text-brand-700 dark:text-brand-300 flex items-center gap-1 mb-0.5">
+            <div className="space-y-3">
+              <div className="p-2.5 bg-brand-50/80 dark:bg-brand-950/40 border border-brand-200 dark:border-brand-500/30 text-slate-700 dark:text-slate-300">
+                <div className="font-bold text-brand-700 dark:text-brand-300 flex items-center gap-1 text-xs mb-0.5">
                   <Key className="w-3.5 h-3.5" />
-                  <span>Real In-Browser LLM Function Calling</span>
-                </span>
+                  <span>Direct In-Browser LLM Function Calling</span>
+                </div>
                 <p className="text-[11px] font-sans text-slate-600 dark:text-slate-400">
-                  Runs real OpenAI API calls directly to <code>api.openai.com/v1/chat/completions</code> with multi-turn tool calling. Zero mock heuristics.
+                  Direct provider API execution with multi-turn tool calling. Your API key stays in local storage and is never sent to our servers.
                 </p>
               </div>
 
+              {/* Provider Selection Grid */}
               <div>
-                <label className="block text-[11px] uppercase font-bold text-slate-600 dark:text-slate-400 mb-1.5">
+                <label className="block text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 mb-1">
                   Select Provider
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
                   {[
-                    { id: 'openai', name: 'OpenAI (ChatGPT)', sub: 'gpt-4o, o3-mini, o1' },
-                    { id: 'ollama', name: 'Ollama (Local LLM)', sub: 'llama3.3, deepseek-r1' },
-                    { id: 'anthropic', name: 'Anthropic Claude', sub: 'claude-3-7-sonnet' },
-                    { id: 'gemini', name: 'Google Gemini', sub: 'gemini-2.0-flash' },
-                    { id: 'custom', name: 'Custom OpenAI Endpoint', sub: 'Groq, LM Studio, etc.' }
+                    { id: 'openai', name: 'OpenAI', defModel: 'gpt-4o' },
+                    { id: 'anthropic', name: 'Claude', defModel: 'claude-3-7-sonnet' },
+                    { id: 'gemini', name: 'Gemini', defModel: 'gemini-2.0-flash' },
+                    { id: 'ollama', name: 'Ollama', defModel: 'llama3.3' },
+                    { id: 'custom', name: 'Custom', defModel: 'gpt-4o' }
                   ].map((p) => (
                     <button
                       key={p.id}
                       type="button"
-                      onClick={() => setConfig({ ...config, provider: p.id as AgentProvider })}
-                      className={`p-2.5 text-left border rounded-none transition-all ${
+                      onClick={() => setConfig({ ...config, provider: p.id as AgentProvider, model: config.model || p.defModel })}
+                      className={`p-2 text-center border transition-all text-xs ${
                         config.provider === p.id
                           ? 'border-brand-500 bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300 font-bold shadow-sm'
                           : 'border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-dark-900 text-slate-700 dark:text-slate-300 hover:border-brand-500/40'
                       }`}
                     >
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs">{p.name}</span>
-                        {config.provider === p.id && <Check className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />}
-                      </div>
-                      <div className="text-[10px] text-slate-500 dark:text-slate-400 font-sans mt-0.5">{p.sub}</div>
+                      <div className="truncate font-semibold">{p.name}</div>
                     </button>
                   ))}
                 </div>
@@ -413,7 +369,7 @@ requests.post(BRIDGE_URL, json={
               {/* API Key Input */}
               {config.provider !== 'ollama' && (
                 <div>
-                  <label className="block text-[11px] uppercase font-bold text-slate-600 dark:text-slate-400 mb-1">
+                  <label className="block text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 mb-1">
                     {config.provider.toUpperCase()} API Key
                   </label>
                   <div className="relative">
@@ -422,34 +378,31 @@ requests.post(BRIDGE_URL, json={
                       value={config.apiKey}
                       onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
                       placeholder={`Enter ${config.provider} API key (e.g. sk-...)`}
-                      className="w-full p-2 pl-8 bg-slate-50 dark:bg-dark-900 border border-slate-300 dark:border-white/10 rounded-none text-xs text-slate-900 dark:text-white outline-none focus:border-brand-500"
+                      className="w-full p-2 pl-8 bg-slate-50 dark:bg-dark-900 border border-slate-300 dark:border-white/10 text-xs text-slate-900 dark:text-white outline-none focus:border-brand-500 font-mono"
                     />
                     <Key className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
                   </div>
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400 font-sans mt-1">
-                    Your key is stored only in local storage (localStorage) and sent directly to the provider.
-                  </p>
                 </div>
               )}
 
-              {/* Model selection */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Model & Base URL inputs */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[11px] uppercase font-bold text-slate-600 dark:text-slate-400 mb-1">
-                    Model
+                  <label className="block text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 mb-1">
+                    Model Name
                   </label>
                   <input
                     type="text"
                     value={config.model}
                     onChange={(e) => setConfig({ ...config, model: e.target.value })}
                     placeholder="gpt-4o"
-                    className="w-full p-2 bg-slate-50 dark:bg-dark-900 border border-slate-300 dark:border-white/10 rounded-none text-xs text-slate-900 dark:text-white outline-none focus:border-brand-500"
+                    className="w-full p-1.5 bg-slate-50 dark:bg-dark-900 border border-slate-300 dark:border-white/10 text-xs text-slate-900 dark:text-white outline-none focus:border-brand-500 font-mono"
                   />
                 </div>
 
                 {(config.provider === 'ollama' || config.provider === 'custom') && (
                   <div>
-                    <label className="block text-[11px] uppercase font-bold text-slate-600 dark:text-slate-400 mb-1">
+                    <label className="block text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 mb-1">
                       Base URL Endpoint
                     </label>
                     <input
@@ -457,41 +410,15 @@ requests.post(BRIDGE_URL, json={
                       value={config.baseUrl || ''}
                       onChange={(e) => setConfig({ ...config, baseUrl: e.target.value })}
                       placeholder="http://localhost:11434/v1"
-                      className="w-full p-2 bg-slate-50 dark:bg-dark-900 border border-slate-300 dark:border-white/10 rounded-none text-xs text-slate-900 dark:text-white outline-none focus:border-brand-500"
+                      className="w-full p-1.5 bg-slate-50 dark:bg-dark-900 border border-slate-300 dark:border-white/10 text-xs text-slate-900 dark:text-white outline-none focus:border-brand-500 font-mono"
                     />
                   </div>
                 )}
               </div>
 
-              {/* Actions */}
-              <div className="flex items-center gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  className="btn-sharp px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white font-bold flex items-center gap-1.5 shadow-sm shadow-brand-600/30 transition-all"
-                >
-                  <Check className="w-3.5 h-3.5" />
-                  <span>{isSaved ? 'Configuration Saved!' : 'Save Configuration'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleTestAgent}
-                  disabled={testStatus === 'testing'}
-                  className="btn-sharp px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-dark-900 dark:hover:bg-dark-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-white/10 flex items-center gap-1.5 transition-colors"
-                >
-                  {testStatus === 'testing' ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-600" />
-                  ) : (
-                    <Play className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
-                  )}
-                  <span>Test Real API Tool Call</span>
-                </button>
-              </div>
-
-              {/* Test Output */}
+              {/* Real API Test Output */}
               {testOutput && (
-                <div className="mt-3 p-3 bg-slate-950 text-emerald-400 border border-slate-800 rounded-none text-[11px] font-mono leading-relaxed max-h-48 overflow-y-auto whitespace-pre-wrap">
+                <div className="p-2.5 bg-slate-950 text-emerald-400 border border-slate-800 text-[10px] font-mono leading-relaxed max-h-32 overflow-y-auto whitespace-pre-wrap">
                   {testOutput}
                 </div>
               )}
@@ -500,13 +427,14 @@ requests.post(BRIDGE_URL, json={
 
           {/* TAB 3: Python & LangChain */}
           {activeTab === 'external' && (
-            <div className="space-y-4">
-              <div className="border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-dark-900 p-3">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                    <span>Python Script (LangChain / OpenAI Swarm / Requests)</span>
+            <div className="space-y-3">
+              <div className="border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-dark-900 p-3 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-900 dark:text-white text-xs">
+                    Python Script (LangChain / OpenAI Swarm / Requests)
                   </span>
                   <button
+                    type="button"
                     onClick={() => handleCopy(pythonSnippet, 'python')}
                     className="flex items-center gap-1 text-[11px] text-brand-600 dark:text-brand-400 hover:underline"
                   >
@@ -514,7 +442,7 @@ requests.post(BRIDGE_URL, json={
                     <span>{copiedKey === 'python' ? 'Copied' : 'Copy Python'}</span>
                   </button>
                 </div>
-                <pre className="p-2.5 bg-slate-950 text-emerald-400 text-[10px] overflow-x-auto max-h-56">
+                <pre className="p-2.5 bg-slate-950 text-emerald-400 text-[10px] overflow-x-auto max-h-48 border border-slate-800 font-mono">
                   {pythonSnippet}
                 </pre>
               </div>
@@ -523,17 +451,17 @@ requests.post(BRIDGE_URL, json={
 
           {/* TAB 4: Bridge Server Status */}
           {activeTab === 'bridge' && (
-            <div className="space-y-4">
-              <div className="p-4 bg-slate-50 dark:bg-dark-900 border border-slate-200 dark:border-white/10 flex items-center justify-between">
+            <div className="space-y-3">
+              <div className="p-3 bg-slate-50 dark:bg-dark-900 border border-slate-200 dark:border-white/10 flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-2">
                     <span className={`w-2.5 h-2.5 rounded-full ${bridgeRunning ? 'bg-emerald-500 animate-ping' : 'bg-rose-500'}`} />
-                    <span className="font-bold text-sm text-slate-900 dark:text-white">
+                    <span className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white">
                       {bridgeRunning ? 'WebMCP Bridge Online' : 'WebMCP Bridge Offline'}
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-sans mt-1">
-                    Serving Stdio & SSE via <span className="font-mono text-brand-600 dark:text-brand-400 font-medium">{activeTargetUrl}</span>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-sans mt-0.5">
+                    Target: <span className="font-mono text-brand-600 dark:text-brand-400 font-semibold">{activeTargetUrl}</span>
                     <a
                       href={`${activeTargetUrl}/health`}
                       target="_blank"
@@ -549,19 +477,20 @@ requests.post(BRIDGE_URL, json={
                 <button
                   type="button"
                   onClick={() => webMcp.connectBridgeServer()}
-                  className="btn-sharp px-3 py-1.5 bg-slate-200 dark:bg-dark-800 text-slate-800 dark:text-slate-200 hover:bg-brand-600 hover:text-white transition-colors text-xs"
+                  className="px-2.5 py-1 bg-slate-200 dark:bg-dark-800 text-slate-800 dark:text-slate-200 hover:bg-brand-600 hover:text-white transition-colors text-xs font-semibold"
                 >
                   Reconnect
                 </button>
               </div>
 
-              <div className="p-3 bg-slate-900 text-slate-200 border border-slate-800 space-y-2">
+              <div className="p-2.5 bg-slate-900 text-slate-200 border border-slate-800 space-y-1.5">
                 <span className="text-[10px] uppercase text-slate-400 tracking-wider font-bold block">
-                  Bridge Server Terminal Command:
+                  Local Terminal Command:
                 </span>
                 <div className="flex items-center justify-between p-2 bg-slate-950 text-emerald-400 font-mono text-xs">
                   <code>npm.cmd run bridge</code>
                   <button
+                    type="button"
                     onClick={() => handleCopy('npm.cmd run bridge', 'bridge_cmd')}
                     className="text-slate-400 hover:text-white"
                   >
@@ -573,19 +502,94 @@ requests.post(BRIDGE_URL, json={
           )}
         </div>
 
-        {/* Footer */}
-        <div className="p-3.5 border-t border-slate-200 dark:border-white/[0.08] bg-slate-50 dark:bg-dark-900/80 flex items-center justify-between">
-          <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-            Provider: <span className="font-bold text-brand-600 dark:text-brand-400 uppercase">{config.provider}</span> ({config.model})
+        {/* Always Fixed Sticky Footer with Action Buttons */}
+        <div className="px-4 py-2.5 border-t border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-dark-900/90 flex flex-wrap items-center justify-between gap-2 shrink-0">
+          <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono flex items-center gap-2">
+            {activeTab === 'in-browser' && (
+              <span>Provider: <strong className="text-brand-600 dark:text-brand-400 uppercase">{config.provider}</strong> ({config.model})</span>
+            )}
+            {activeTab === 'chatgpt-desktop' && (
+              <span>Method: <strong className="text-brand-600 dark:text-brand-400">{desktopMethod === 'sse' ? 'Remote SSE' : 'Local Stdio'}</strong></span>
+            )}
+            {activeTab === 'external' && <span>LangChain / Python Requests Bridge</span>}
+            {activeTab === 'bridge' && (
+              <span className="flex items-center gap-1">
+                Status: <strong className={bridgeRunning ? 'text-emerald-500' : 'text-rose-500'}>{bridgeRunning ? 'Online' : 'Offline'}</strong>
+              </span>
+            )}
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="btn-sharp px-4 py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-dark-800 dark:hover:bg-dark-700 text-slate-800 dark:text-slate-200 font-mono text-xs font-semibold transition-colors"
-          >
-            Close
-          </button>
+
+          <div className="flex items-center gap-2">
+            {activeTab === 'in-browser' && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleTestAgent}
+                  disabled={testStatus === 'testing'}
+                  className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-dark-800 dark:hover:bg-dark-750 text-slate-800 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                >
+                  {testStatus === 'testing' ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-500" />
+                  ) : (
+                    <Play className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
+                  )}
+                  <span>Test Call</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  className="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>{isSaved ? 'Saved!' : 'Save Config'}</span>
+                </button>
+              </>
+            )}
+
+            {activeTab === 'chatgpt-desktop' && (
+              <button
+                type="button"
+                onClick={() => handleCopy(desktopMethod === 'sse' ? chatGptSseConfig : chatGptDesktopConfig, 'desktop_config')}
+                className="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all"
+              >
+                {copiedKey === 'desktop_config' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedKey === 'desktop_config' ? 'Copied!' : 'Copy JSON'}</span>
+              </button>
+            )}
+
+            {activeTab === 'external' && (
+              <button
+                type="button"
+                onClick={() => handleCopy(pythonSnippet, 'python')}
+                className="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all"
+              >
+                {copiedKey === 'python' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedKey === 'python' ? 'Copied!' : 'Copy Python'}</span>
+              </button>
+            )}
+
+            {activeTab === 'bridge' && (
+              <button
+                type="button"
+                onClick={() => webMcp.connectBridgeServer()}
+                className="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all"
+              >
+                <Zap className="w-3.5 h-3.5" />
+                <span>Reconnect</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-dark-850 dark:hover:bg-dark-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-white/10 text-xs font-semibold transition-colors"
+            >
+              Close
+            </button>
+          </div>
         </div>
+
       </div>
     </div>
   );
