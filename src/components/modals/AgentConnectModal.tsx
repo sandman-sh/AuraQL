@@ -96,6 +96,8 @@ export const AgentConnectModal: React.FC<AgentConnectModalProps> = ({
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
+  const bridgeUrl = webMcp.getBridgeUrl();
+
   // Real ChatGPT Desktop configuration
   const chatGptDesktopConfig = `{
   "mcpServers": {
@@ -112,7 +114,7 @@ export const AgentConnectModal: React.FC<AgentConnectModalProps> = ({
   const chatGptSseConfig = `{
   "mcpServers": {
     "auraql": {
-      "url": "http://localhost:3001/sse"
+      "url": "${bridgeUrl}/sse"
     }
   }
 }`;
@@ -122,7 +124,7 @@ export const AgentConnectModal: React.FC<AgentConnectModalProps> = ({
   const pythonSnippet = `import requests
 
 # 1. Connect to live WebMCP Bridge
-BRIDGE_URL = "http://localhost:3001/api/mcp"
+BRIDGE_URL = "${bridgeUrl}/api/mcp"
 
 # 2. ChatGPT / Agent executes SQL query in browser AuraQL memory
 res = requests.post(BRIDGE_URL, json={
@@ -488,7 +490,7 @@ requests.post(BRIDGE_URL, json={
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 font-sans mt-1">
-                    Port 3001 serving Stdio & SSE for Desktop ChatGPT (Codex) and Claude Desktop.
+                    Serving Stdio & SSE via <span className="font-mono text-brand-600 dark:text-brand-400 font-medium">{bridgeUrl}</span>
                   </p>
                 </div>
 

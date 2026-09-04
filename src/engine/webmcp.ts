@@ -52,8 +52,25 @@ class WebMcpManager {
     });
   }
 
-  public connectBridgeServer(bridgeUrl: string = ((import.meta as any).env?.VITE_BRIDGE_URL as string) || 'http://localhost:3001') {
+  public activeBridgeUrl: string = '';
+
+  public static getDefaultBridgeUrl(): string {
+    if (typeof import.meta !== 'undefined' && ((import.meta as any).env?.VITE_BRIDGE_URL as string)) {
+      return (import.meta as any).env.VITE_BRIDGE_URL;
+    }
+    if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+      return 'https://auraql.onrender.com';
+    }
+    return 'http://localhost:3001';
+  }
+
+  public getBridgeUrl(): string {
+    return this.activeBridgeUrl || WebMcpManager.getDefaultBridgeUrl();
+  }
+
+  public connectBridgeServer(bridgeUrl: string = WebMcpManager.getDefaultBridgeUrl()) {
     if (typeof window === 'undefined') return;
+    this.activeBridgeUrl = bridgeUrl;
     if (this.bridgeEventSource) {
       try {
         this.bridgeEventSource.close();

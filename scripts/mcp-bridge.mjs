@@ -172,6 +172,24 @@ const pendingRequests = new Map();
 // Active MCP SSE Client Sessions: sessionId -> res
 const mcpSessions = new Map();
 
+// Periodic keep-alive ping to prevent cloud load balancers (e.g. Render 55s idle timeout) from closing SSE streams
+setInterval(() => {
+  for (const client of browserClients) {
+    try {
+      client.write(': keepalive\n\n');
+    } catch {
+      browserClients.delete(client);
+    }
+  }
+  for (const [id, res] of mcpSessions) {
+    try {
+      res.write(': keepalive\n\n');
+    } catch {
+      mcpSessions.delete(id);
+    }
+  }
+}, 25000);
+
 /**
  * Dispatches a tool call to the connected browser tab
  */
@@ -345,7 +363,10 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  const proto = req.headers['x-forwarded-proto'] || (req.socket.encrypted ? 'https' : 'http');
+  const host = req.headers['x-forwarded-host'] || req.headers.host || `localhost:${PORT}`;
+  const baseUrl = `${proto}://${host}`;
+  const url = new URL(req.url, baseUrl);
 
   // Health Check
   if (url.pathname === '/health' || url.pathname === '/') {
@@ -357,8 +378,8 @@ const server = http.createServer(async (req, res) => {
       activeBrowserTabs: browserClients.size,
       availableTools: TOOLS_SPEC.map(t => t.name),
       mcpEndpoints: {
-        sse: `http://localhost:${PORT}/sse`,
-        rest: `http://localhost:${PORT}/api/mcp`
+        sse: `${baseUrl}/sse`,
+        rest: `${baseUrl}/api/mcp`
       }
     }, null, 2));
     return;
