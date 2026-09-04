@@ -40,6 +40,7 @@ export const AgentConnectModal: React.FC<AgentConnectModalProps> = ({
   const [testOutput, setTestOutput] = useState<string>('');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [bridgeRunning, setBridgeRunning] = useState<boolean>(webMcp.isBridgeConnected);
+  const [bridgeTarget, setBridgeTarget] = useState<'cloud' | 'local'>('cloud');
 
   useEffect(() => {
     if (isOpen) {
@@ -96,7 +97,6 @@ export const AgentConnectModal: React.FC<AgentConnectModalProps> = ({
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  const [bridgeTarget, setBridgeTarget] = useState<'cloud' | 'local'>('cloud');
   const activeTargetUrl = bridgeTarget === 'cloud' ? 'https://auraql.onrender.com' : 'http://localhost:3001';
 
   // Real ChatGPT Desktop configuration
