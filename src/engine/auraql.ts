@@ -50,10 +50,27 @@ export class AuraQLEngine {
   private tables: Map<string, Record<string, any>[]> = new Map();
 
   constructor() {
-    this.tables.set('ecommerce_sales', INITIAL_ECOMMERCE_DATA);
-    this.tables.set('saas_churn_metrics', INITIAL_SAAS_CHURN_DATA);
-    this.tables.set('cloud_software_financials', INITIAL_FINANCIALS_DATA);
     this.hydrateFromStorage();
+  }
+
+  /**
+   * Loads a sample dataset into memory on demand.
+   */
+  public loadPreloadedDataset(tableName: string): Record<string, any>[] {
+    const key = (tableName || '').toLowerCase().trim();
+    if (key === 'ecommerce_sales') {
+      this.tables.set('ecommerce_sales', INITIAL_ECOMMERCE_DATA);
+      return INITIAL_ECOMMERCE_DATA;
+    }
+    if (key === 'saas_churn_metrics') {
+      this.tables.set('saas_churn_metrics', INITIAL_SAAS_CHURN_DATA);
+      return INITIAL_SAAS_CHURN_DATA;
+    }
+    if (key === 'cloud_software_financials') {
+      this.tables.set('cloud_software_financials', INITIAL_FINANCIALS_DATA);
+      return INITIAL_FINANCIALS_DATA;
+    }
+    return this.tables.get(key) || [];
   }
 
   /**
@@ -78,7 +95,14 @@ export class AuraQLEngine {
 
   public getTableData(tableName: string): Record<string, any>[] {
     if (!tableName) return [];
-    return this.tables.get(tableName.toLowerCase()) || [];
+    const key = tableName.toLowerCase().trim();
+    if (this.tables.has(key)) {
+      return this.tables.get(key) || [];
+    }
+    if (key === 'ecommerce_sales' || key === 'saas_churn_metrics' || key === 'cloud_software_financials') {
+      return this.loadPreloadedDataset(key);
+    }
+    return [];
   }
 
   public getTableCount(): number {

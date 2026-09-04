@@ -6,6 +6,7 @@ import { SqlConsole } from './SqlConsole';
 import { DataTable } from './DataTable';
 import { WebMcpInspector } from './WebMcpInspector';
 import { UploadModal } from '../modals/UploadModal';
+import { DatasetSelectorModal } from '../modals/DatasetSelectorModal';
 import { ExecutiveReportModal } from '../modals/ExecutiveReportModal';
 import { AgentConnectModal } from '../modals/AgentConnectModal';
 import { ShareModal } from '../modals/ShareModal';
@@ -47,7 +48,8 @@ interface StudioWorkspaceProps {
 
 export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome, onOpenDocs }) => {
   const initialTables = auraEngine.getTableNames();
-  const [activeDataset, setActiveDataset] = useState<string>(initialTables[0] || 'ecommerce_sales');
+  const [activeDataset, setActiveDataset] = useState<string>(initialTables[0] || '');
+  const [isDatasetSelectorOpen, setIsDatasetSelectorOpen] = useState<boolean>(initialTables.length === 0);
   const [isInspectorOpen, setIsInspectorOpen] = useState<boolean>(false);
   const [isUploadOpen, setIsUploadOpen] = useState<boolean>(false);
   const [isReportOpen, setIsReportOpen] = useState<boolean>(false);
@@ -324,10 +326,11 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome, 
     setChartConfig((prev) => ({ ...prev, type }));
   };
 
-  const handleCustomDatasetImported = (tableName: string, count: number) => {
+  const handleCustomDatasetImported = (tableName: string, _count?: number) => {
     const safeName = (tableName || '').toLowerCase().replace(/[^a-z0-9_]/g, '_');
     setActiveDataset(safeName);
     setIsUploadOpen(false);
+    setIsDatasetSelectorOpen(false);
     const customSql = `SELECT * FROM ${safeName} LIMIT 50;`;
     setCurrentSql(customSql);
     handleRunQuery(customSql);
@@ -350,21 +353,11 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome, 
     }
   };
 
-  // Helper to load sample real CSV data on user demand without starting with preloaded data
-  const handleLoadSampleData = () => {
-    const sampleRows: Record<string, any>[] = [
-      { company: 'Snowflake Inc', ticker: 'SNOW', segment: 'Data Cloud', quarterly_revenue_m: 829.3, gross_margin_pct: 71.2, yoy_growth_pct: 32.1, headcount: 7004 },
-      { company: 'Datadog Inc', ticker: 'DDOG', segment: 'Observability', quarterly_revenue_m: 611.2, gross_margin_pct: 80.5, yoy_growth_pct: 27.4, headcount: 5200 },
-      { company: 'Cloudflare Inc', ticker: 'NET', segment: 'Security & CDN', quarterly_revenue_m: 378.6, gross_margin_pct: 78.4, yoy_growth_pct: 30.5, headcount: 3840 },
-      { company: 'Palantir Tech', ticker: 'PLTR', segment: 'AI & Defense', quarterly_revenue_m: 678.1, gross_margin_pct: 82.1, yoy_growth_pct: 27.2, headcount: 3800 },
-      { company: 'CrowdStrike', ticker: 'CRWD', segment: 'Cybersecurity', quarterly_revenue_m: 921.0, gross_margin_pct: 77.8, yoy_growth_pct: 33.0, headcount: 7925 },
-      { company: 'Confluent Inc', ticker: 'CFLT', segment: 'Data Streaming', quarterly_revenue_m: 235.0, gross_margin_pct: 73.1, yoy_growth_pct: 24.5, headcount: 2900 },
-      { company: 'MongoDB Inc', ticker: 'MDB', segment: 'Database', quarterly_revenue_m: 478.2, gross_margin_pct: 75.3, yoy_growth_pct: 22.0, headcount: 5080 },
-      { company: 'Elastic NV', ticker: 'ESTC', segment: 'Search & Observability', quarterly_revenue_m: 341.0, gross_margin_pct: 76.5, yoy_growth_pct: 18.2, headcount: 3200 }
-    ];
-
-    auraEngine.registerCustomTable('cloud_software_financials', sampleRows);
-    handleCustomDatasetImported('cloud_software_financials', sampleRows.length);
+  // Helper to load sample dataset on user demand without starting with preloaded data
+  const handleLoadSampleData = (sampleKey: string = 'ecommerce_sales') => {
+    auraEngine.loadPreloadedDataset(sampleKey);
+    handleSelectDataset(sampleKey);
+    setIsDatasetSelectorOpen(false);
   };
 
   // Layout Persistence Helper
@@ -704,6 +697,7 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome, 
         isWebMcpActive={true}
         recentToolCallCount={events.length}
         onOpenDocs={onOpenDocs}
+        onOpenDatasetSelector={() => setIsDatasetSelectorOpen(true)}
         onOpenShare={() => setIsShareOpen(true)}
         onOpenExportSlide={() => setIsExportSlideOpen(true)}
       />
@@ -932,19 +926,19 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome, 
               {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
                 <button
-                  onClick={() => setIsUploadOpen(true)}
+                  onClick={() => setIsDatasetSelectorOpen(true)}
                   className="w-full sm:w-auto btn-sharp px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-mono text-xs font-bold flex items-center justify-center gap-2 shadow-md shadow-brand-600/30 transition-all border border-brand-400/40"
                 >
                   <Upload className="w-4 h-4" />
-                  <span>Import Local CSV or JSON</span>
+                  <span>Upload Your Own Dataset (.csv, .json)</span>
                 </button>
 
                 <button
-                  onClick={handleLoadSampleData}
+                  onClick={() => setIsDatasetSelectorOpen(true)}
                   className="w-full sm:w-auto btn-sharp px-5 py-2.5 bg-white dark:bg-dark-900 hover:bg-slate-100 dark:hover:bg-dark-850 text-slate-800 dark:text-slate-200 font-mono text-xs font-semibold flex items-center justify-center gap-2 border border-slate-300 dark:border-white/10 hover:border-brand-500/40 transition-colors shadow-sm"
                 >
                   <Sparkles className="w-4 h-4 text-brand-600 dark:text-brand-400" />
-                  <span>Load Cloud Software CSV (Sample)</span>
+                  <span>Load Demo Datasets to Test</span>
                 </button>
               </div>
 
@@ -994,6 +988,14 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({ onReturnHome, 
           />
         )}
       </div>
+
+      {/* Dataset Selection & Onboarding Modal */}
+      <DatasetSelectorModal
+        isOpen={isDatasetSelectorOpen}
+        onClose={() => setIsDatasetSelectorOpen(false)}
+        onSelectDataset={handleLoadSampleData}
+        canClose={true}
+      />
 
       {/* CSV / JSON Upload Modal */}
       <UploadModal
